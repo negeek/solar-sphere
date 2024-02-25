@@ -8,7 +8,7 @@ import (
 )
 
 func (u *User) Create() error {
-	collection := db.Client.Database("solar-sphere-db").Collection("users")
+	collection := db.Client.Database(DB).Collection(USER_COLLECTION)
 	utils.Time(u, true)
 	_, err := collection.InsertOne(context.TODO(), u)
 	if err != nil {
@@ -18,7 +18,7 @@ func (u *User) Create() error {
 }
 
 func (u *User) Delete() error {
-	collection := db.Client.Database("solar-sphere-db").Collection("users")
+	collection := db.Client.Database(DB).Collection(USER_COLLECTION)
 	_, err := collection.DeleteOne(context.TODO(), bson.D{{"email",u.Email}})
 	if err != nil {
 		return err

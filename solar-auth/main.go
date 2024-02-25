@@ -50,7 +50,7 @@ func main(){
 	go func() {
 		fmt.Println("Start solar-auth server")
 		if err:= server.ListenAndServe(); err != nil {
-			fmt.Println(err)
+			log.Fatal(err)
 		}
 	}()
 

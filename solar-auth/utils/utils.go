@@ -5,8 +5,17 @@ import (
 	"reflect"
 	"time"
 	"encoding/json"
+	"encoding/binary"
+	"encoding/hex"
 	"io"
+	"os"
 	"net/http"
+	"crypto/ed25519"
+	"crypto/rand"
+	"strconv"
+	"strings"
+	mathrand "math/rand"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func Time(strct interface{}, new bool) error {
@@ -38,8 +47,6 @@ func Time(strct interface{}, new bool) error {
 
 }
 
-
-
 // sends json response
 func JsonResponse(w http.ResponseWriter, success bool, statusCode int, message string, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -65,3 +72,80 @@ func Unmarshall(r io.Reader, strct interface{})(error){
 	}
 	return nil
 }
+
+// Generate user access key
+func GenerateAccessKey(email string) (string,error){
+	var (
+		accessKey string
+		err error
+		signingKey ed25519.PrivateKey //since PrivateKey implements crypto.Signer
+	)
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, UserClaim{
+		RegisteredClaims: jwt.RegisteredClaims{},
+		Email: email,
+		DateTime: time.Now().UTC(),
+	})
+
+	// Create the actual key
+	signingKey, err = hex.DecodeString(os.Getenv("SIGNING_KEY"))
+	if err != nil {
+		return "", err
+	}
+
+	accessKey, err = token.SignedString(signingKey)
+
+	if err != nil {
+		return "", err
+	}
+	return accessKey, nil
+}
+
+func GenerateKeyPairs()([]byte, []byte, error){
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil{
+		return nil, nil, err
+	}
+	return publicKey, privateKey, nil
+}
+
+func GenerateUserID(email string)string {
+	// Modify email address (example: remove special characters)
+	var (
+		sanitized strings.Builder
+		idLength int = 24
+	)
+	for _, ch := range email {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') {
+			sanitized.WriteRune(ch)
+		}
+	}
+	emailSanitized := sanitized.String()
+
+	// Get current time in milliseconds
+	now := time.Now().UnixNano() / int64(time.Millisecond)
+
+	// Generate a random integer within a specific range using crypto/rand for better randomness
+	randomIntBytes := make([]byte, 8) // 8 bytes for int64
+	rand.Read(randomIntBytes)
+	randomInt := int64(binary.LittleEndian.Uint64(randomIntBytes)) % now
+	
+	// Combine modified email, timestamp, and random integer
+	combined := emailSanitized + strconv.FormatInt(now, 10) + strconv.FormatInt(randomInt, 10)
+
+	// Ensure the combined string is exactly 24 characters long
+	if len(combined) > idLength {
+		combined = combined[:idLength]
+	} else if len(combined) < idLength {
+		combined += strings.Repeat("-", idLength-len(combined))
+	}
+
+	// Shuffle the combined string
+	runes := []rune(combined)
+	for i := len(runes) - 1; i > 0; i-- {
+		j := mathrand.Intn(i + 1) // Generate a random index within the remaining range
+		runes[i], runes[j] = runes[j], runes[i] // Swap characters at indices i and j
+	}
+	return string(runes)
+}
+
+

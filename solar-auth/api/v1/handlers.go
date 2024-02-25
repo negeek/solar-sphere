@@ -16,7 +16,23 @@ func Auth(w http.ResponseWriter, r *http.Request){
 			return	
 		}
 
-		// create user
+		// Generate Access Key and ID
+		var accessKey, ID string
+		accessKey, err= utils.GenerateAccessKey(user.Email)
+		if err != nil{
+			utils.JsonResponse(w, false, http.StatusBadRequest , "Error generating access key", nil)
+			return	
+		}
+		
+		ID=utils.GenerateUserID(user.Email)
+		if err != nil{
+			utils.JsonResponse(w, false, http.StatusBadRequest , "Error generating user ID", nil)
+			return	
+		}
+
+		// Create User
+		user.ID=ID
+		user.Key=accessKey
 		err=user.Create()
 		if err != nil{
 			utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
