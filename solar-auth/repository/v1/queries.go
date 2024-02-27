@@ -10,7 +10,7 @@ import (
 func (u *User) Create() error {
 	collection := db.Client.Database(DB).Collection(USER_COLLECTION)
 	utils.Time(u, true)
-	_, err := collection.InsertOne(context.TODO(), u)
+	_, err := collection.InsertOne(context.Background(), u)
 	if err != nil {
 		return err
 	}
@@ -19,7 +19,26 @@ func (u *User) Create() error {
 
 func (u *User) Delete() error {
 	collection := db.Client.Database(DB).Collection(USER_COLLECTION)
-	_, err := collection.DeleteOne(context.TODO(), bson.D{{"email",u.Email}})
+	_, err := collection.DeleteOne(context.Background(), bson.D{{"_id",u.ID}})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (k *AccessKey) RevokeStatus() error {
+	collection := db.Client.Database(DB).Collection(KEY_COLLECTION)
+	err := collection.FindOne(context.Background(), bson.D{{"key", k.Key}}).Decode(k)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (k *AccessKey) Revoke() error {
+	k.Revoked = true
+	collection := db.Client.Database(DB).Collection(KEY_COLLECTION)
+	_, err := collection.InsertOne(context.Background(), k)
 	if err != nil {
 		return err
 	}

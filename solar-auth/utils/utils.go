@@ -21,12 +21,12 @@ import (
 func Time(strct interface{}, new bool) error {
 	t := reflect.TypeOf(strct)
 	v := reflect.ValueOf(strct).Elem()
-	// validate if strct is a pointer and struct
+	// Validate if strct is a pointer and struct
 	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
 		return errors.New("strct must be a pointer to a struct")
 	}
 
-	// validate if the datecreated and dateupdated fields are in strct and are of type time.Time
+	// Validate if the datecreated and dateupdated fields are in strct and are of type time.Time
 	dateCreatedField, has_created := t.Elem().FieldByName("DateCreated")
 	dateUpdatedField, has_updated := t.Elem().FieldByName("DateUpdated")
 	if has_created == false || has_updated == false {
@@ -37,7 +37,7 @@ func Time(strct interface{}, new bool) error {
 		return errors.New("strct DateCreated and DateUpdated fields must be of type time.Time")
 	}
 
-	// set the time for the fields based on new arguement value
+	// Set the time for the fields based on new arguement value
 	if new {
 		// Set the "DateUpdated" field to current UTC time
 		v.FieldByName("DateCreated").Set(reflect.ValueOf(time.Now().UTC()))
@@ -47,7 +47,6 @@ func Time(strct interface{}, new bool) error {
 
 }
 
-// sends json response
 func JsonResponse(w http.ResponseWriter, success bool, statusCode int, message string, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -59,7 +58,6 @@ func JsonResponse(w http.ResponseWriter, success bool, statusCode int, message s
 	})
 }
 
-// unmarshall io.Reader type such as http request body
 func Unmarshall(r io.Reader, strct interface{})(error){
 	structType := reflect.TypeOf(strct)
 	if structType.Kind() != reflect.Ptr || structType.Elem().Kind() != reflect.Struct {
@@ -73,20 +71,20 @@ func Unmarshall(r io.Reader, strct interface{})(error){
 	return nil
 }
 
-// Generate user access key
 func GenerateAccessKey(email string) (string,error){
 	var (
 		accessKey string
 		err error
-		signingKey ed25519.PrivateKey //since PrivateKey implements crypto.Signer
+		signingKey ed25519.PrivateKey // Since PrivateKey implements crypto.Signer
+		token = &jwt.Token{}
 	)
-	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, UserClaim{
+	token = jwt.NewWithClaims(jwt.SigningMethodEdDSA, UserClaim{
 		RegisteredClaims: jwt.RegisteredClaims{},
 		Email: email,
 		DateTime: time.Now().UTC(),
 	})
 
-	// Create the actual key
+	// Create the access key
 	signingKey, err = hex.DecodeString(os.Getenv("SIGNING_KEY"))
 	if err != nil {
 		return "", err
@@ -100,6 +98,30 @@ func GenerateAccessKey(email string) (string,error){
 	return accessKey, nil
 }
 
+func VerifyAccessKey(accessKey string) (*UserClaim, error) {
+	// Parse and validate the access key
+
+	var (
+		token = &jwt.Token{}
+		err error
+		verificationKey ed25519.PublicKey 
+	)
+
+	verificationKey, err = hex.DecodeString(os.Getenv("VERIFICATION_KEY"))
+	if err != nil {
+		return nil, err
+	}
+
+	token, err = jwt.ParseWithClaims(accessKey, &UserClaim{}, func(token *jwt.Token) (interface{}, error) {
+		return verificationKey, nil
+	})
+	if err != nil {
+		return  nil, err
+	}
+	
+	return token.Claims.(*UserClaim), nil	
+}
+
 func GenerateKeyPairs()([]byte, []byte, error){
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil{
@@ -109,23 +131,23 @@ func GenerateKeyPairs()([]byte, []byte, error){
 }
 
 func GenerateUserID(email string)string {
-	// Modify email address (example: remove special characters)
 	var (
 		sanitized strings.Builder
 		idLength int = 24
 	)
+
+	// Remove special characters from email
+	email = strings.ToLower(email)
 	for _, ch := range email {
-		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') {
 			sanitized.WriteRune(ch)
 		}
 	}
 	emailSanitized := sanitized.String()
 
-	// Get current time in milliseconds
+	// Generate a random integer within a specific range
 	now := time.Now().UnixNano() / int64(time.Millisecond)
-
-	// Generate a random integer within a specific range using crypto/rand for better randomness
-	randomIntBytes := make([]byte, 8) // 8 bytes for int64
+	randomIntBytes := make([]byte, 8)
 	rand.Read(randomIntBytes)
 	randomInt := int64(binary.LittleEndian.Uint64(randomIntBytes)) % now
 	
@@ -145,6 +167,8 @@ func GenerateUserID(email string)string {
 		j := mathrand.Intn(i + 1) // Generate a random index within the remaining range
 		runes[i], runes[j] = runes[j], runes[i] // Swap characters at indices i and j
 	}
+
+	// Return string ID
 	return string(runes)
 }
 
