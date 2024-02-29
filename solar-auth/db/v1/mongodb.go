@@ -9,9 +9,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var Client *mongo.Client
+var (
+	Client *mongo.Client
+	MongoDB *mongo.Database
+)
 
-func Connect(connString string)(context.Context, context.CancelFunc, error) {
+func Connect(connString string, dbName string)(context.Context, context.CancelFunc, error) {
 	var err error
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -27,6 +30,10 @@ func Connect(connString string)(context.Context, context.CancelFunc, error) {
 		return ctx, cancel, err
 	}
 	fmt.Println("Successfully connected to db")
+
+	//db
+	MongoDB = Client.Database(dbName)
+
 	return ctx, cancel, nil
 }
 

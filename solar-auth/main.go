@@ -11,7 +11,7 @@ import (
     "os/signal"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
-	"github.com/negeek/solar-sphere/solar-auth/db"
+	db "github.com/negeek/solar-sphere/solar-auth/db/v1"
 	v1routes "github.com/negeek/solar-sphere/solar-auth/api/v1"
 		)
 
@@ -29,9 +29,10 @@ func main(){
 	v1routes.Routes(router.StrictSlash(true))
 	
 	// DB connection
-	dbURL:= os.Getenv("DATABASE_URL")
+	dbUrl:= os.Getenv("DATABASE_URL")
+	dbName:=os.Getenv("DB_NAME")
 	fmt.Println("Connecting to db")
-	dbctx, dbcancel, err:= db.Connect(dbURL)
+	dbctx, dbcancel, err:= db.Connect(dbUrl,dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
