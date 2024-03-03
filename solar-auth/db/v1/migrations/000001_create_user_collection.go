@@ -32,7 +32,8 @@ var (
 		Keys:    bson.M{"email": 1},
 		Options: options.Index().SetUnique(true),
 	}
-	userOptions = &options.CreateCollectionOptions{} 
+	userOptions = &options.CreateCollectionOptions{}
+	err error
 )
 
 func MakeMigration(){

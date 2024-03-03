@@ -29,11 +29,12 @@ var (
 								}
 	
 
-	keyOptions       = &options.CreateCollectionOptions{}
-	keyIndexModel    = mongo.IndexModel{
+	keyOptions = &options.CreateCollectionOptions{}
+	keyIndexModel = mongo.IndexModel{
 		Keys:    bson.M{"key": 1}, 
 		Options: options.Index().SetUnique(true),
 	}
+	err error
 )
 
 func MakeMigration(){
