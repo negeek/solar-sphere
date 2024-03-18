@@ -1,4 +1,4 @@
-package migrations
+package main
 
 import (
 	"log"
@@ -11,14 +11,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 var (
-	keySchema primitive.M = bson.M{
+	userSchema primitive.M = bson.M{
 									"$jsonSchema":{
 										"bsonType": "object",
-										"required": []string{"key", "email"},
+										"required": []string{"_id", "email"},
 										"properties": bson.M{
-											"key": bson.M{
+											"_id": bson.M{
 												"bsonType": "string",
-												"description": "key is required and must be a string",
+												"description": "id is required and must be a string",
 											},
 											"email": bson.M{
 												"bsonType": "string",
@@ -27,25 +27,24 @@ var (
 										},
 									}
 								}
-	
 
-	keyOptions = &options.CreateCollectionOptions{}
-	keyIndexModel = mongo.IndexModel{
-		Keys:    bson.M{"key": 1}, 
+	userIndexModel = mongo.IndexModel{
+		Keys:    bson.M{"email": 1},
 		Options: options.Index().SetUnique(true),
 	}
+	userOptions = &options.CreateCollectionOptions{}
 	err error
 )
 
 func MakeMigration(){
-	keyOptions.SetValidator(keySchema)
-	err = db.MongoDB.CreateCollection(ctx, KEY_COLLECTION, keyOptions)
+	userOptions.SetValidator(userSchema)
+	err = db.MongoDB.CreateCollection(ctx, USER_COLLECTION, userOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
 	
 	// Create unique index on email field for users collection
-	_, err = db.MongoDB.Collection(KEY_COLLECTION).Indexes().CreateOne(ctx, keyIndexModel)
+	_, err = db.MongoDB.Collection(USER_COLLECTION).Indexes().CreateOne(ctx, userIndexModel)
 	if err != nil {
 		log.Fatal(err)
 	}
