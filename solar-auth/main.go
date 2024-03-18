@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"fmt"
 	"log"
 	"time"
 	"context"
@@ -31,7 +30,7 @@ func main(){
 	// DB connection
 	dbUrl:= os.Getenv("DATABASE_URL")
 	dbName:=os.Getenv("DB_NAME")
-	fmt.Println("Connecting to db")
+	log.Println("Connecting to db")
 	dbctx, dbcancel, err:= db.Connect(dbUrl,dbName)
 	if err != nil {
 		log.Fatal(err)
@@ -49,7 +48,7 @@ func main(){
 
 	// Run server in a goroutine so that it doesn't block.
 	go func() {
-		fmt.Println("Start solar-auth server")
+		log.Println("Start server")
 		if err:= server.ListenAndServe(); err != nil {
 			log.Fatal(err)
 		}
@@ -73,7 +72,7 @@ func main(){
 	// until the timeout deadline.
 	server.Shutdown(ctx)
 
-	fmt.Println("Shutting down solar-auth server")
+	log.Println("Shutting down server")
 	os.Exit(0)
 
 }

@@ -2,7 +2,7 @@ package db
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"time"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -29,7 +29,7 @@ func Connect(connString string, dbName string)(context.Context, context.CancelFu
 	if err := Client.Database("admin").RunCommand(ctx, bson.D{{"ping", 1}}).Decode(&result); err != nil {
 		return ctx, cancel, err
 	}
-	fmt.Println("Successfully connected to db")
+	log.Println("Successfully connected to db")
 
 	//db
 	MongoDB = Client.Database(dbName)
@@ -39,7 +39,7 @@ func Connect(connString string, dbName string)(context.Context, context.CancelFu
 
 func Disconnect(ctx context.Context, cancel context.CancelFunc){
 	defer cancel()
-	fmt.Println("Disconnecting db")
+	log.Println("Disconnecting db")
 	if err := Client.Disconnect(ctx); err != nil {
 		panic(err)
 	}
