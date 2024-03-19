@@ -34,7 +34,7 @@ func Auth(w http.ResponseWriter, r *http.Request){
 	// Create User
 	err=user.Create()
 	if err != nil{
-		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
+		utils.JsonResponse(w, false, http.StatusBadRequest , "Error creating user", nil)
 		return	
 	}
 
@@ -49,7 +49,7 @@ func NewAccessKey(w http.ResponseWriter, r *http.Request){
 		Function grants users new access keys but users have to provide previous access key.
 	*/
 	var (
-		key = &model.AccessKey{}
+		key = &model.RevokedKey{}
 		err error
 		claim = &utils.UserClaim{} 
 		accessKey string
@@ -75,11 +75,11 @@ func NewAccessKey(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	// Check Revoke status
-	key.RevokeStatus()
-	if key.Revoked{
-		utils.JsonResponse(w, false, http.StatusBadRequest , "Access key already revoked", nil)
-		return
+	// Revoke previous key
+	err = key.Revoke()
+	if err != nil{
+		utils.JsonResponse(w, false, http.StatusBadRequest , "Error Revoking Key. Ensure you haven't revoked it previously", nil)
+		return	
 	}
 
 	// Generate new access key for user
@@ -88,9 +88,6 @@ func NewAccessKey(w http.ResponseWriter, r *http.Request){
 		utils.JsonResponse(w, false, http.StatusBadRequest , "Error generating new access key", nil)
 		return	
 	}
-
-	// Revoke previous key
-	key.Revoke()
 
 	// Response
 	utils.JsonResponse(w, true, http.StatusCreated ,"Successfully changed access key", map[string]interface{}{"email":key.Email,
@@ -106,6 +103,5 @@ func RecoverAccessKey() {
 		In actual sense, it generates new one for them.
 		I will need to get their email, send them a link in the email. Once they click it, they get their access key in another email sent to them.
 	*/
-
 
 }

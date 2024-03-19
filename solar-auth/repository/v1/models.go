@@ -10,8 +10,7 @@ type User struct {
 }
 
 
-type AccessKey struct {
+type RevokedKey struct {
 	Key			string	  `bson:"key" json:"key"`
-	Email       string    `bson:"email" json:"email"`
-	Revoked		bool	  `bson:"revoked" json:"revoked"`	
+	Email       string    `bson:"email" json:"email"`	
 }

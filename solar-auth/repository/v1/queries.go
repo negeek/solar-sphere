@@ -3,7 +3,7 @@ package v1
 import (
 	"context"
 	"github.com/negeek/solar-sphere/solar-auth/utils"
-	db "github.com/negeek/solar-sphere/solar-auth/db/v1"
+	"github.com/negeek/solar-sphere/solar-auth/db"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -31,17 +31,7 @@ func (u *User) Delete() error {
 	return nil
 }
 
-func (k *AccessKey) RevokeStatus() error {
-	collection := db.MongoDB.Collection(KEY_COLLECTION)
-	err := collection.FindOne(context.Background(), bson.D{{"key", k.Key}}).Decode(k)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (k *AccessKey) Revoke() error {
-	k.Revoked = true
+func (k *RevokedKey) Revoke() error {
 	collection := db.MongoDB.Collection(KEY_COLLECTION)
 	_, err := collection.InsertOne(context.Background(), k)
 	if err != nil {

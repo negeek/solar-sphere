@@ -10,7 +10,7 @@ import (
     "os/signal"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
-	db "github.com/negeek/solar-sphere/solar-auth/db/v1"
+	"github.com/negeek/solar-sphere/solar-auth/db"
 	v1routes "github.com/negeek/solar-sphere/solar-auth/api/v1"
 		)
 

@@ -13,7 +13,7 @@ import (
 
 var MigrationDir string =  "/db_migrations/migration_files"
 var MigratedDir string = "/db_migrations/migrated_files"
-var TrackChanges int = 0
+var TrackedChanges int = 0
 
 func getThisFileDir() string {
     // Get the caller's PC (program counter)
@@ -55,7 +55,7 @@ func Migrate() error {
                 return err
             }
             if !migrated {
-                TrackChanges+=1
+                TrackedChanges+=1
                 log.Printf("Migrating: %s\n", filepath.Base(path))
                 if err := executeMakeMigrationFunction(path); err != nil {
                     log.Fatal(err)
@@ -136,7 +136,9 @@ func main(){
 	if err != nil{
 		log.Fatal(err)
 	}
-    if TrackChanges < 1 {
+    if TrackedChanges < 1 {
         log.Println("No changes made")
+    } else {
+        log.Println(TrackedChanges, " changes made")
     }
 }
