@@ -4,7 +4,7 @@ Solar-Sphere is a free and powerful API designed to provide remote access to sol
 
 ## The Device
 
-![Solar Meter](https://github.com/negeek/solar-sphere/blob/main/solarmeterproject.png)
+![Solar Meter](https://drive.google.com/file/d/1Qou4G9glwTdEnD9p1wbXtTuWoLBqFF4f/view?usp=sharing)
 
 ### About the API
 
