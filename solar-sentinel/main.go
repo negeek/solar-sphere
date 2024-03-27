@@ -5,10 +5,15 @@ import (
     "log"
     "time"
 	"os"
+    irr"github.com/negeek/solar-sphere/solar-sentinel/api/v1"
 )
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	log.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
+    device_id:= strings.Split(msg.Topic, "/")[3]
+    log.Println("Device id: ", device_id)
+    err:= irr.SaveSolarIrrdianceData(device_id, msg.Payload())
+
 }
 
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
@@ -26,6 +31,19 @@ func main() {
 		if err != nil {
 			log.Fatal("Error loading .env file")
 		}
+	}
+
+    //custom servermutiplexer
+	router := mux.NewRouter()
+	v1routes.Routes(router.StrictSlash(true))
+
+    //custom server
+	server:=&http.Server{
+		Addr: ":5000",
+		Handler: router,
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+		IdleTimeout:  60 *  time.Second,
 	}
 
     // DB connection
@@ -52,6 +70,14 @@ func main() {
     }
     SuscribeToTopic(client, os.Getenv("MQTT_TOPIC"), 0, nil)
 
+
+    go func() {
+		log.Println("Start server")
+		if err:= server.ListenAndServe(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
     c := make(chan os.Signal, 1)
 	// accept graceful shutdowns when quit via SIGINT (Ctrl+C)
 	// SIGKILL will not be caught.
@@ -64,6 +90,7 @@ func main() {
     log.Println("Disconnect from broker")
     client.Disconnect(250)
     log.Println("Shutting down")
+    server.Shutdown(ctx)
 	os.Exit(0)
 }
 
