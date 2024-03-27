@@ -73,7 +73,7 @@ var (
 
 	irrOptions = &options.CreateCollectionOptions{}
 	err error
-	IRR_COLLECTION string = "solar-irradiance-data"
+	IRR_COLLECTION string = "solar-irradiance"
 	client *mongo.Client
 	mongoDB *mongo.Database
 )
