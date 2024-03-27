@@ -24,7 +24,6 @@ var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Me
 	payload:=msg.Payload()
 	log.Printf("Received message: %s from topic: %s\n", payload, topic)
     device_id:= strings.Split(topic, "/")[3]
-    log.Println("Device id: ", device_id)
 	err := json.Unmarshal(payload, &payloadMap)
 	if err != nil {
 		log.Fatal("Invalid msg format")
