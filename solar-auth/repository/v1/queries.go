@@ -2,6 +2,8 @@ package v1
 
 import (
 	"context"
+	"errors"
+	"go.mongodb.org/mongo-driver/mongo"
 	"github.com/negeek/solar-sphere/solar-auth/utils"
 	"github.com/negeek/solar-sphere/solar-auth/db"
 	"go.mongodb.org/mongo-driver/bson"
@@ -10,6 +12,7 @@ import (
 var (
 	USER_COLLECTION string = "users"
 	KEY_COLLECTION string = "keys"
+	DEVICE_COLLECTION string = "devices"
 )
 
 func (u *User) Create() error {
@@ -20,6 +23,19 @@ func (u *User) Create() error {
 		return err
 	}
 	return nil
+}
+
+func ValidateDeviceID(device_id string)bool{
+	var result bson.M
+	collection := db.MongoDB.Collection(DEVICE_COLLECTION)
+	err := collection.FindOne(context.Background(), bson.D{{"_id", device_id}}).Decode(&result)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return false
+		}
+		return false
+	}
+	return true
 }
 
 func (u *User) Delete() error {

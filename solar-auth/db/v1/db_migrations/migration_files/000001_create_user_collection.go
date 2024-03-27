@@ -12,11 +12,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func Connect(connString string, dbName string)(context.Context, context.CancelFunc, error) {
+func connect(connString string, dbName string)(context.Context, context.CancelFunc, error) {
 	var err error
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	Client, err = mongo.Connect(ctx, options.Client().ApplyURI(connString).SetServerAPIOptions(serverAPI))
+	client, err = mongo.Connect(ctx, options.Client().ApplyURI(connString).SetServerAPIOptions(serverAPI))
 
 	if err != nil {
 		return ctx, cancel, err
@@ -24,24 +24,24 @@ func Connect(connString string, dbName string)(context.Context, context.CancelFu
 	
 	// Send a ping to confirm a successful connection
 	var result bson.M
-	if err := Client.Database("admin").RunCommand(ctx, bson.D{{"ping", 1}}).Decode(&result); err != nil {
+	if err := client.Database("admin").RunCommand(ctx, bson.D{{"ping", 1}}).Decode(&result); err != nil {
 		return ctx, cancel, err
 	}
 
 	//db
-	MongoDB = Client.Database(dbName)
+	mongoDB = client.Database(dbName)
 
 	return ctx, cancel, nil
 }
 
-func Disconnect(ctx context.Context, cancel context.CancelFunc){
+func disconnect(ctx context.Context, cancel context.CancelFunc){
 	defer cancel()
-	if err := Client.Disconnect(ctx); err != nil {
+	if err := client.Disconnect(ctx); err != nil {
 		panic(err)
 	}
 }
 
-func GetEnv(){
+func getEnv(){
 	appEnv:=os.Getenv("APP_ENV")
 	if appEnv=="dev"{
 		err := godotenv.Load(".env")
@@ -57,7 +57,7 @@ var (
 	userSchema primitive.M = bson.M{
 									"$jsonSchema":bson.M{
 										"bsonType": "object",
-										"required": []string{"_id", "email"},
+										"required": []string{"_id", "email", "device_id"},
 										"properties": bson.M{
 											"_id": bson.M{
 												"bsonType": "string",
@@ -67,6 +67,11 @@ var (
 												"bsonType": "string",
 												"description": "email is required and must be a string",
 											},
+
+											"device_id": bson.M{
+												"bsonType": "string",
+												"description": "device_id is required and must be a string",
+											},
 										},
 									},
 								}
@@ -75,36 +80,44 @@ var (
 		Keys:    bson.M{"email": 1},
 		Options: options.Index().SetUnique(true),
 	}
+	userIndexModel2 = mongo.IndexModel{
+		Keys:    bson.M{"device_id":1},
+		Options: options.Index().SetUnique(true),
+	}
 	userOptions = &options.CreateCollectionOptions{}
 	err error
 	USER_COLLECTION string = "users"
-	Client *mongo.Client
-	MongoDB *mongo.Database
+	client *mongo.Client
+	mongoDB *mongo.Database
 )
 
 func MakeMigration(){
 	// Optional
-	GetEnv()
+	getEnv()
 
 	// Connect to DB
-	dbctx, dbcancel, err:= Connect(os.Getenv("DATABASE_URL"), os.Getenv("DB_NAME"))
+	dbctx, dbcancel, err:= connect(os.Getenv("DATABASE_URL"), os.Getenv("DB_NAME"))
 	if err != nil {
 		log.Fatal(err)
 	}
 	
 	// Create user collection
 	userOptions.SetValidator(userSchema)
-	err = MongoDB.CreateCollection(context.Background(), USER_COLLECTION, userOptions)
+	err = mongoDB.CreateCollection(context.Background(), USER_COLLECTION, userOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
 	
-	// Create unique index on email field for users collection
-	_, err = MongoDB.Collection(USER_COLLECTION).Indexes().CreateOne(context.Background(), userIndexModel)
+	// Create unique index on email, device_id, fields for users collection
+	_, err = mongoDB.Collection(USER_COLLECTION).Indexes().CreateOne(context.Background(), userIndexModel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = mongoDB.Collection(USER_COLLECTION).Indexes().CreateOne(context.Background(), userIndexModel2)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// End connection
-	defer Disconnect(dbctx,dbcancel)
+	defer disconnect(dbctx,dbcancel)
 }

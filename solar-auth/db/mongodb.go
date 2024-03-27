@@ -39,7 +39,7 @@ func Connect(connString string, dbName string)(context.Context, context.CancelFu
 
 func Disconnect(ctx context.Context, cancel context.CancelFunc){
 	defer cancel()
-	log.Println("Disconnecting db")
+	log.Println("Disconnect db")
 	if err := Client.Disconnect(ctx); err != nil {
 		panic(err)
 	}

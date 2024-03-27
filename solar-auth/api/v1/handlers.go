@@ -14,6 +14,7 @@ func Auth(w http.ResponseWriter, r *http.Request){
 		user = &model.User{}
 		accessKey string
 		err error
+		deviceExists bool
 	)
 
 	// Read  request body
@@ -30,6 +31,13 @@ func Auth(w http.ResponseWriter, r *http.Request){
 		return	
 	}
 	user.ID=utils.GenerateUserID(user.Email)
+
+	// Validate device id
+	deviceExists = model.ValidateDeviceID(user.DeviceID)
+	if !deviceExists{
+		utils.JsonResponse(w, false, http.StatusBadRequest , "Invalid device id", nil)
+		return
+	}
 
 	// Create User
 	err=user.Create()
