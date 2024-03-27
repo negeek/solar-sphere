@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/negeek/solar-sphere/solar-sentinel/utils"
 	"github.com/negeek/solar-sphere/solar-sentinel/db"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 var (
@@ -14,7 +13,7 @@ var (
 
 func (d *Device) Create() error {
 	collection := db.MongoDB.Collection(DEVICE_COLLECTION)
-	utils.Time(u, true)
+	utils.Time(d, true)
 	_, err := collection.InsertOne(context.Background(), d)
 	if err != nil {
 		return err
@@ -24,7 +23,7 @@ func (d *Device) Create() error {
 
 func (s *SolarIrradiance) Create() error {
 	collection := db.MongoDB.Collection(IRR_COLLECTION)
-	utils.Time(u, true)
+	utils.Time(s, true)
 	_, err := collection.InsertOne(context.Background(), s)
 	if err != nil {
 		return err

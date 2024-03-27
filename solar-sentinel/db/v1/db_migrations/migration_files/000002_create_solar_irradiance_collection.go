@@ -12,11 +12,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func Connect(connString string, dbName string)(context.Context, context.CancelFunc, error) {
+func connect(connString string, dbName string)(context.Context, context.CancelFunc, error) {
 	var err error
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	Client, err = mongo.Connect(ctx, options.Client().ApplyURI(connString).SetServerAPIOptions(serverAPI))
+	client, err = mongo.Connect(ctx, options.Client().ApplyURI(connString).SetServerAPIOptions(serverAPI))
 
 	if err != nil {
 		return ctx, cancel, err
@@ -24,24 +24,24 @@ func Connect(connString string, dbName string)(context.Context, context.CancelFu
 	
 	// Send a ping to confirm a successful connection
 	var result bson.M
-	if err := Client.Database("admin").RunCommand(ctx, bson.D{{"ping", 1}}).Decode(&result); err != nil {
+	if err := client.Database("admin").RunCommand(ctx, bson.D{{"ping", 1}}).Decode(&result); err != nil {
 		return ctx, cancel, err
 	}
 
 	//db
-	MongoDB = Client.Database(dbName)
+	mongoDB = client.Database(dbName)
 
 	return ctx, cancel, nil
 }
 
-func Disconnect(ctx context.Context, cancel context.CancelFunc){
+func disconnect(ctx context.Context, cancel context.CancelFunc){
 	defer cancel()
-	if err := Client.Disconnect(ctx); err != nil {
+	if err := client.Disconnect(ctx); err != nil {
 		panic(err)
 	}
 }
 
-func GetEnv(){
+func getEnv(){
 	appEnv:=os.Getenv("APP_ENV")
 	if appEnv=="dev"{
 		err := godotenv.Load(".env")
@@ -74,27 +74,27 @@ var (
 	irrOptions = &options.CreateCollectionOptions{}
 	err error
 	IRR_COLLECTION string = "solar-irradiance-data"
-	Client *mongo.Client
-	MongoDB *mongo.Database
+	client *mongo.Client
+	mongoDB *mongo.Database
 )
 
 func MakeMigration(){
 	// Optional
-	GetEnv()
+	getEnv()
 
 	// Connect to DB
-	dbctx, dbcancel, err:= Connect(os.Getenv("DATABASE_URL"), os.Getenv("DB_NAME"))
+	dbctx, dbcancel, err:= connect(os.Getenv("DATABASE_URL"), os.Getenv("DB_NAME"))
 	if err != nil {
 		log.Fatal(err)
 	}
 	
 	// Create solar-irradiance collection
 	irrOptions.SetValidator(irrSchema)
-	err = MongoDB.CreateCollection(context.Background(), IRR_COLLECTION, irrOptions)
+	err = mongoDB.CreateCollection(context.Background(), IRR_COLLECTION, irrOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
 	
 	// End connection
-	defer Disconnect(dbctx,dbcancel)
+	defer disconnect(dbctx,dbcancel)
 }

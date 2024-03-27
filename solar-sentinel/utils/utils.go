@@ -13,6 +13,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"strconv"
+	"strings"
 	mathrand "math/rand"
 	"github.com/golang-jwt/jwt/v5"
 )

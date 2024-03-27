@@ -49,7 +49,7 @@ func Migrate() error {
             return err
         }
         if !info.IsDir() && filepath.Ext(path) == ".go" {
-            migrated, err := SkipAlreadyMigrated(path)
+            migrated, err := skipAlreadyMigrated(path)
             if err != nil {
                 log.Fatal(err)
                 return err
@@ -117,7 +117,7 @@ func compileGoFile(filePath string) (string, error) {
     return outFile, nil
 }
 
-func SkipAlreadyMigrated(filePath string) (bool, error) {
+func skipAlreadyMigrated(filePath string) (bool, error) {
 	migratedDir:= filepath.Join(getThisFileDir(), MigratedDir)
 	fileName:=filepath.Base(filePath)
     compiledFilePath := filepath.Join(migratedDir, fileName)

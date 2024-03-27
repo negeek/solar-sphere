@@ -1,18 +1,38 @@
 package main
 
 import (
-    mqtt "github.com/eclipse/paho.mqtt.golang"
-    "log"
-    "time"
 	"os"
+	"log"
+	"time"
+	"context"
+	"syscall"
+	"strings"
+	"encoding/json"
+	"net/http"
+    "os/signal"
+	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
+    mqtt "github.com/eclipse/paho.mqtt.golang"
     irr"github.com/negeek/solar-sphere/solar-sentinel/api/v1"
+	v1routes "github.com/negeek/solar-sphere/solar-sentinel/api/v1"
+	"github.com/negeek/solar-sphere/solar-sentinel/db"
 )
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-	log.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
-    device_id:= strings.Split(msg.Topic, "/")[3]
+	var payloadMap map[string]interface{}
+	topic:=msg.Topic()
+	payload:=msg.Payload()
+	log.Printf("Received message: %s from topic: %s\n", payload, topic)
+    device_id:= strings.Split(topic, "/")[3]
     log.Println("Device id: ", device_id)
-    err:= irr.SaveSolarIrrdianceData(device_id, msg.Payload())
+	err := json.Unmarshal(payload, &payloadMap)
+	if err != nil {
+		log.Fatal("Invalid msg format")
+	}
+    err = irr.SaveSolarIrrdianceData(device_id, payloadMap)
+	if err != nil {
+		log.Fatal("Unable to save data")
+	}
 
 }
 
@@ -66,9 +86,9 @@ func main() {
     opts.OnConnectionLost = connectLostHandler
     client := mqtt.NewClient(opts)
     if token := client.Connect(); token.Wait() && token.Error() != nil {
-        log.Error(token.Error())
+        log.Println(token.Error())
     }
-    SuscribeToTopic(client, os.Getenv("MQTT_TOPIC"), 0, nil)
+    suscribeToTopic(client, os.Getenv("MQTT_TOPIC"), 0, nil)
 
 
     go func() {
@@ -85,19 +105,25 @@ func main() {
 
 	// Block until we receive our signal.
 	<-c
+	// Create a deadline to wait for.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	// disconnect broker and db
 	db.Disconnect(dbctx,dbcancel)
     log.Println("Disconnect from broker")
+
     client.Disconnect(250)
     log.Println("Shutting down")
+
     server.Shutdown(ctx)
 	os.Exit(0)
 }
 
-func SuscribeToTopic(client mqtt.Client, topic string, qos byte, msgH mqtt.MessageHandler) {
+func suscribeToTopic(client mqtt.Client, topic string, qos byte, msgH mqtt.MessageHandler) {
     token := client.Subscribe(topic, qos, msgH)
     if token.Wait() && token.Error() != nil{
-		log.Error(token.Error())
+		log.Println(token.Error())
 	}
   log.Printf("Subscribed to topic: %s", topic)
 }

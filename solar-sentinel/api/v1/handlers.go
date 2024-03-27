@@ -19,7 +19,7 @@ func Create_DeviceID(w http.ResponseWriter, r *http.Request){
 		return	
 	}
 
-	device.ID=utils.GenerateUserID()
+	device.ID=utils.GenerateID()
 
 	// Create device
 	err=device.Create()
