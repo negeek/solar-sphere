@@ -6,8 +6,8 @@ import (
 	model"github.com/negeek/solar-sphere/solar-sentinel/repository/v1"
 )
 
+// TODO Only Admins should access this endpoint.
 func Create_DeviceID(w http.ResponseWriter, r *http.Request){
-
 	var (
 		device = &model.Device{}
 		err error
@@ -19,8 +19,10 @@ func Create_DeviceID(w http.ResponseWriter, r *http.Request){
 		return	
 	}
 
-	device.ID=utils.GenerateID()
-
+	if device.ID == "" {
+		device.ID=utils.GenerateID()
+	}
+	
 	// Create device
 	err=device.Create()
 	if err != nil{

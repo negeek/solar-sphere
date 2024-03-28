@@ -25,14 +25,11 @@ func (u *User) Create() error {
 	return nil
 }
 
-func ValidateDeviceID(device_id string)bool{
-	var result bson.M
+func SaveDeviceID(device_id string)bool{
 	collection := db.MongoDB.Collection(DEVICE_COLLECTION)
-	err := collection.FindOne(context.Background(), bson.D{{"_id", device_id}}).Decode(&result)
+	// device ids with name of custom is for those that have their own solar-irradiance meter
+	_, err := collection.InsertOne(context.Background(), bson.D{{"_id":device_id, "name":"custom"}})
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return false
-		}
 		return false
 	}
 	return true
