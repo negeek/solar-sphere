@@ -71,6 +71,7 @@ func NewAccessKey(w http.ResponseWriter, r *http.Request){
 		return	
 	}
 
+	// TODO this should be the job of a middleware
 	// Verify their access key and make sure it matches the email provided.
 	claim, err = utils.VerifyAccessKey(key.Key)
 	if err != nil{

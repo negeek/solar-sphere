@@ -161,3 +161,17 @@ func GenerateID()string {
 }
 
 
+func StructFieldNames(s interface{}) ([]string, error) {
+	// Ensure that the provided value is a struct
+	var fieldsList []string
+	t := reflect.TypeOf(s)
+	if t.Kind() != reflect.Struct {
+		return fieldsList, err
+	}
+	// Iterate over the fields of the struct
+	for i := 0; i < t.NumField(); i++ {
+		fieldName := t.Field(i).Name
+		fieldsList = append(fieldsList, fieldName)
+	}
+	return fieldsList, nil
+}

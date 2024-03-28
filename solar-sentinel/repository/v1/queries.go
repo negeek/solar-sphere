@@ -31,3 +31,17 @@ func (s *SolarIrradiance) Create() error {
 	return nil
 
 }
+
+func (d *Device) GetAllSolarData() ([]SolarIrradiance, error){
+	var data []SolarIrradiance
+	collection := db.MongoDB.Collection(IRR_COLLECTION)
+	cursor, err := collection.Find(context.Background(), bson.D{{"device_id", d.DeviceID}}, opts)
+	if err != nil {
+		return data, err
+	}
+
+	if err = cursor.All(context.Background(), &data); err != nil {
+		return data, err
+	}
+	return data, nil
+} 
