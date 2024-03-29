@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/negeek/solar-sphere/solar-sentinel/utils"
 	"github.com/negeek/solar-sphere/solar-sentinel/db"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 var (
@@ -35,7 +36,7 @@ func (s *SolarIrradiance) Create() error {
 func (d *Device) GetAllSolarData() ([]SolarIrradiance, error){
 	var data []SolarIrradiance
 	collection := db.MongoDB.Collection(IRR_COLLECTION)
-	cursor, err := collection.Find(context.Background(), bson.D{{"device_id", d.DeviceID}}, opts)
+	cursor, err := collection.Find(context.Background(), bson.D{{"device_id", d.ID}})
 	if err != nil {
 		return data, err
 	}

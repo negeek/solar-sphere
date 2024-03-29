@@ -161,12 +161,12 @@ func GenerateID()string {
 }
 
 
-func StructFieldNames(s interface{}) ([]string, error) {
+func StructFieldNames(s interface{}) ([]interface{}, error) {
 	// Ensure that the provided value is a struct
-	var fieldsList []string
+	var fieldsList []interface{}
 	t := reflect.TypeOf(s)
 	if t.Kind() != reflect.Struct {
-		return fieldsList, err
+		return fieldsList, errors.New("Arguement must be of type struct")
 	}
 	// Iterate over the fields of the struct
 	for i := 0; i < t.NumField(); i++ {
@@ -174,4 +174,41 @@ func StructFieldNames(s interface{}) ([]string, error) {
 		fieldsList = append(fieldsList, fieldName)
 	}
 	return fieldsList, nil
+}
+
+
+func MapKeys(m map[string]interface{}) []interface{} {
+    // Initialize an empty slice to store the keys
+    var keysList []interface{}
+
+    // Iterate over the keys of the map
+    for key := range m {
+        // Append the key to the list
+        keysList = append(keysList, key)
+    }
+
+    return keysList
+}
+
+
+func MapValues(m map[string]interface{}) []interface{} {
+    // Initialize an empty slice to store the values
+    var valuesList []interface{}
+
+    // Iterate over the values of the map
+    for _, value := range m {
+        // Append the value to the list
+        valuesList = append(valuesList, value)
+    }
+
+    return valuesList
+}
+
+func RemoveItem(slice []interface{}, target interface{}) []interface{} {
+	for i, val := range slice {
+		if val == target {
+			return append(slice[:i], slice[i+1:]...)
+		}
+	}
+	return slice
 }

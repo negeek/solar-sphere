@@ -1,9 +1,13 @@
 package v1
 
 import (
-	"os"
+	//"bytes"
+	//"os"
+	"time"
+	"encoding/csv"
 	"fmt"
 	"net/http"
+	"github.com/gorilla/mux"
 	"github.com/negeek/solar-sphere/solar-sentinel/utils"
 	model"github.com/negeek/solar-sphere/solar-sentinel/repository/v1"
 
@@ -43,55 +47,60 @@ func DownloadSolarIrrData(w http.ResponseWriter, r *http.Request){
 		device = &model.Device{}
 		err error
 		data []model.SolarIrradiance
-		headers []string
-		dataSample = model.SolarIrradiance{}
-		file os.File
+		solarFields []interface{}
 	)
-
-	// param
+	//  query param
 	vars := mux.Vars(r)
-	device.DeviceID = vars["device_id"]
-
-
+	device.ID = vars["device_id"]
 	// Prepare CSV file
-	filename:= device.DeviceID+".csv"
-	file, err = os.Create(filename)
-	if err != nil {
-		utils.JsonResponse(w, false, http.StatusBadRequest , "Failed to create csv file", nil)
-		return
-	}
-	defer file.Close()
-
+	filename:= device.ID+".csv"
+	// Prepare CSV data
 	data, err = device.GetAllSolarData()
 	if err != nil{
 		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
 		return	
 	}
-
-	// Prepare CSV data
-	csvData := [][]string{{"DeviceID", "DateUpdated"}}
-
-	for _, solar := range data {
-		row := []string{solar.DeviceID, solar.DateUpdated.Format(time.RFC3339)}
-		for key := range solar.Data {
-			row = append(row, key)
-		}
-		csvData = append(csvData, row)
+	// Get fields from SolarIrradiance struct
+	solarFields, err = utils.StructFieldNames(data[0])
+	if err != nil{
+		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
+		return
 	}
-
-	writer := csv.NewWriter(file)
+	// Remove the Data field from list of SolarIrradiance struct fields
+	solarFields = utils.RemoveItem(solarFields, "Data")
+	// Get the fields of Data field in SolarIrradiance struct
+	dataKeys:=utils.MapKeys(data[0].Data)
+	headers	:= append(dataKeys, solarFields...)
+	csvData := [][]interface{}{headers}
+	// Get all row data to be written to csv file
+	for _, solar := range data {
+		dataRowValues:= utils.MapValues(solar.Data)
+		dataRowValues= append(dataRowValues, solar.DeviceID)
+		dataRowValues= append(dataRowValues, solar.DateUpdated.Format(time.RFC3339))
+		csvData = append(csvData, dataRowValues)
+	}
+	// create writer and write directly to response writer
+	writer := csv.NewWriter(w)
 	defer writer.Flush()
-
+	// Convert all row data to string and write to repsonse writer
 	for _, row := range csvData {
-		err := writer.Write(row)
+		 // Convert each interface{} value to a string
+		 var stringRow []string
+		 for _, value := range row {
+			stringValue, ok := value.(string)
+			if !ok {
+				// Handle if value is not a string
+				stringValue = fmt.Sprintf("%v", value)
+			}
+			stringRow = append(stringRow, stringValue)
+		 }
+		err := writer.Write(stringRow)
 		if err != nil {
 			utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
 			return
 		}
 	}
-
-	// Serve the CSV file for download
+	// set content headers and specify file name to be <device_id.csv>
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	http.ServeFile(w, r, filename)
 }
