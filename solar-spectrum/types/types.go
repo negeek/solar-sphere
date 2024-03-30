@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 type User struct {
 	ID			string	  `bson:"_id" json:"id"`
 	Email       string    `bson:"email" json:"email"`
