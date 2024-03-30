@@ -1,4 +1,4 @@
-package solar-spectrum
+package solar_spectrum
 
 type User struct {
 	ID			string	  `bson:"_id" json:"id"`
