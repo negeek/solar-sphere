@@ -14,7 +14,7 @@ func Auth(w http.ResponseWriter, r *http.Request){
 		user = &model.User{}
 		accessKey string
 		err error
-		deviceExists bool
+		saved bool
 	)
 
 	// Read  request body

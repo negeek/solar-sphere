@@ -49,10 +49,9 @@ func (d *Device) GetAllSolarData() ([]SolarIrradiance, error){
 	return data, nil
 } 
 
-func (u *types.User) FindUser()bool{
+func FindUserByEmail(u *types.User)bool{
 	collection := db.MongoDB.Collection(consts.USER_COLLECTION)
-	var result bson.M
-	err := collection.FindOne(context..Background(),bson.D{{"_id", id}}).Decode(&result)
+	err := collection.FindOne(context.Background(),bson.D{{"email", u.Email}}).Decode(&u)
 	if err != nil {
 		return false
 	}

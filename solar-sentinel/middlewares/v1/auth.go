@@ -45,7 +45,7 @@ func AuthenticationMiddleware(handler http.Handler) http.Handler {
 
 		// verify claims 
 		user.Email=claim.Email
-		exist = user.FindUser()
+		exist = model.FindUserByEmail(user)
 		if exist != true {
 			utils.JsonResponse(w, false, http.StatusUnauthorized ,"Invalid User", nil)	
 			return
