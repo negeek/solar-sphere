@@ -4,7 +4,7 @@ import (
 	"strings"
 	"github.com/negeek/solar-sphere/solar-sentinel/utils"
 	model"github.com/negeek/solar-sphere/solar-sentinel/repository/v1"
-	"github.com/negeek/solar-sphere/solar-spectrum/types"
+	"github.com/negeek/solar-sphere/solar-spectrum/shared"
 		)
 
 func AuthenticationMiddleware(handler http.Handler) http.Handler {
@@ -16,7 +16,7 @@ func AuthenticationMiddleware(handler http.Handler) http.Handler {
 			bearer string
 			key string
 			claim = &utils.UserClaim{} 
-			user = &types.User{}
+			user = &shared.User{}
 			exist bool
 		)
 		accessKey = r.Header.Get("Authorization")

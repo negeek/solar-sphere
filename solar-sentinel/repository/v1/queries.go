@@ -5,8 +5,7 @@ import (
 	"github.com/negeek/solar-sphere/solar-sentinel/utils"
 	"github.com/negeek/solar-sphere/solar-sentinel/db"
 	"go.mongodb.org/mongo-driver/bson"
-	"github.com/negeek/solar-sphere/solar-spectrum/consts"
-	"github.com/negeek/solar-sphere/solar-spectrum/types"
+	"github.com/negeek/solar-sphere/solar-spectrum/shared"
 )
 
 const (
@@ -49,8 +48,8 @@ func (d *Device) GetAllSolarData() ([]SolarIrradiance, error){
 	return data, nil
 } 
 
-func FindUserByEmail(u *types.User)bool{
-	collection := db.MongoDB.Collection(consts.USER_COLLECTION)
+func FindUserByEmail(u *shared.User)bool{
+	collection := db.MongoDB.Collection(shared.USER_COLLECTION)
 	err := collection.FindOne(context.Background(),bson.D{{"email", u.Email}}).Decode(&u)
 	if err != nil {
 		return false

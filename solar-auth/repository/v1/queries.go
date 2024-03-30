@@ -6,8 +6,7 @@ import (
 	"github.com/negeek/solar-sphere/solar-auth/utils"
 	"github.com/negeek/solar-sphere/solar-auth/db"
 	"go.mongodb.org/mongo-driver/bson"
-	"github.com/negeek/solar-sphere/solar-spectrum/consts"
-	"github.com/negeek/solar-sphere/solar-spectrum/types"
+	"github.com/negeek/solar-sphere/solar-spectrum/shared"
 )
 
 
@@ -27,8 +26,8 @@ func (u *User) Create() error {
 }
 
 func SaveDeviceID(device_id string)bool{
-	collection := db.MongoDB.Collection(consts.DEVICE_COLLECTION)
-	var device = types.Device{device_id, "custom", time.Now().UTC(), time.Now().UTC()}
+	collection := db.MongoDB.Collection(shared.DEVICE_COLLECTION)
+	var device = shared.Device{device_id, "custom", time.Now().UTC(), time.Now().UTC()}
 	_, err := collection.InsertOne(context.Background(), device)
 	if err != nil {
 		return false

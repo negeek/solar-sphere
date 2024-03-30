@@ -1,4 +1,4 @@
-package consts
+package shared
 
 const (
 	USER_COLLECTION   = "users"

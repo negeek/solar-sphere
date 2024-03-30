@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 	v1routes "github.com/negeek/solar-sphere/solar-sentinel/api/v1"
 	"github.com/negeek/solar-sphere/solar-sentinel/db"
+	v1middlewares "github.com/negeek/solar-sphere/solar-sentinel/middlewares/v1"
 )
 
 func main() {
@@ -25,6 +26,7 @@ func main() {
 
     //custom servermutiplexer
 	router := mux.NewRouter()
+	router.Use(v1middlewares.CORS)
 	v1routes.Routes(router.StrictSlash(true))
 
     //custom server
