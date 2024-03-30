@@ -1,4 +1,4 @@
-package solar_spectrum
+package consts
 
 const (
 	USER_COLLECTION   = "users"
