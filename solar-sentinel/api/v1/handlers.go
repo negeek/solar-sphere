@@ -52,26 +52,32 @@ func DownloadSolarIrrData(w http.ResponseWriter, r *http.Request){
 	//  query param
 	vars := mux.Vars(r)
 	device.ID = vars["device_id"]
+
 	// Prepare CSV file
 	filename:= device.ID+".csv"
+
 	// Prepare CSV data
 	data, err = device.GetAllSolarData()
 	if err != nil{
 		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
 		return	
 	}
+	
 	// Get fields from SolarIrradiance struct
 	solarFields, err = utils.StructFieldNames(data[0])
 	if err != nil{
 		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
 		return
 	}
+
 	// Remove the Data field from list of SolarIrradiance struct fields
 	solarFields = utils.RemoveItem(solarFields, "Data")
+
 	// Get the fields of Data field in SolarIrradiance struct
 	dataKeys:=utils.MapKeys(data[0].Data)
 	headers	:= append(dataKeys, solarFields...)
 	csvData := [][]interface{}{headers}
+
 	// Get all row data to be written to csv file
 	for _, solar := range data {
 		dataRowValues:= utils.MapValues(solar.Data)
@@ -79,9 +85,11 @@ func DownloadSolarIrrData(w http.ResponseWriter, r *http.Request){
 		dataRowValues= append(dataRowValues, solar.DateUpdated.Format(time.RFC3339))
 		csvData = append(csvData, dataRowValues)
 	}
+
 	// create writer and write directly to response writer
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
+
 	// Convert all row data to string and write to repsonse writer
 	for _, row := range csvData {
 		 // Convert each interface{} value to a string
@@ -100,7 +108,8 @@ func DownloadSolarIrrData(w http.ResponseWriter, r *http.Request){
 			return
 		}
 	}
-	// set content headers and specify file name to be <device_id.csv>
+	
+	// Set content headers and specify file name to be <device_id.csv>
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 }

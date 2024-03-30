@@ -5,11 +5,12 @@ import (
 	"github.com/negeek/solar-sphere/solar-sentinel/utils"
 	"github.com/negeek/solar-sphere/solar-sentinel/db"
 	"go.mongodb.org/mongo-driver/bson"
+	shared "github.com/negeek/solar-sphere/solar-spectrum"
 )
 
-var (
-	DEVICE_COLLECTION string = "devices"
-	IRR_COLLECTION string = "solar-irradiance"
+const (
+	DEVICE_COLLECTION = "devices"
+	IRR_COLLECTION = "solar-irradiance"
 )
 
 func (d *Device) Create() error {
@@ -46,3 +47,13 @@ func (d *Device) GetAllSolarData() ([]SolarIrradiance, error){
 	}
 	return data, nil
 } 
+
+func (u *shared.User) FindUser()bool{
+	collection := db.MongoDB.Collection(shared.USER_COLLECTION)
+	var result bson.M
+	err := collection.FindOne(context..Background(),bson.D{{"_id", id}}).Decode(&result)
+	if err != nil {
+		return false
+	}
+	return true
+}

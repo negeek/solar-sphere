@@ -1,18 +1,20 @@
 package v1
 
 import (
+	"time"
 	"context"
 	"errors"
 	"go.mongodb.org/mongo-driver/mongo"
 	"github.com/negeek/solar-sphere/solar-auth/utils"
 	"github.com/negeek/solar-sphere/solar-auth/db"
 	"go.mongodb.org/mongo-driver/bson"
+	shared "github.com/negeek/solar-sphere/solar-spectrum"
 )
 
-var (
-	USER_COLLECTION string = "users"
-	KEY_COLLECTION string = "keys"
-	DEVICE_COLLECTION string = "devices"
+
+const (
+	USER_COLLECTION = "users"
+	KEY_COLLECTION="keys"
 )
 
 func (u *User) Create() error {
@@ -26,9 +28,9 @@ func (u *User) Create() error {
 }
 
 func SaveDeviceID(device_id string)bool{
-	collection := db.MongoDB.Collection(DEVICE_COLLECTION)
-	// device ids with name of custom is for those that have their own solar-irradiance meter
-	_, err := collection.InsertOne(context.Background(), bson.D{{"_id":device_id, "name":"custom"}})
+	collection := db.MongoDB.Collection(shared.DEVICE_COLLECTION)
+	var device = shared.Device{device_id, "custom", time.Now().UTC(), time.Now().UTC()}
+	_, err := collection.InsertOne(context.Background(), device)
 	if err != nil {
 		return false
 	}
