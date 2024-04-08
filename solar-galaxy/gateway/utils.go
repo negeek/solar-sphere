@@ -15,3 +15,16 @@ func JsonResponse(w http.ResponseWriter, success bool, statusCode int, message s
 		Data:    data,
 	})
 }
+
+func ReadConfig() (*ServiceConfig, error) {
+	data, err := ioutil.ReadFile("conf.yaml")
+	if err != nil {
+		return nil, err
+	}
+	var config ServiceConfig
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
