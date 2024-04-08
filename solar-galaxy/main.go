@@ -10,13 +10,14 @@ import (
 	"syscall"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	api"github.com/negeek/solar-sphere/solar-galaxy/api/v1"
 		)
 
 
 func main(){
 	//custom servermutiplexer
 	router := mux.NewRouter()
-	router.HandleFunc("/", api.Home).Methods("GET")
+	router.HandleFunc("/", api.Gateway).Methods("GET")
 	
 	//custom server
 	server:=&http.Server{
