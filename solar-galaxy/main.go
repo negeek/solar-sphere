@@ -9,7 +9,7 @@ import (
 	"context"
 	"syscall"
 	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
+	//"github.com/joho/godotenv"
 	api"github.com/negeek/solar-sphere/solar-galaxy/api/v1"
 		)
 
@@ -17,7 +17,7 @@ import (
 func main(){
 	//custom servermutiplexer
 	router := mux.NewRouter()
-	router.HandleFunc("/", api.Gateway).Methods("GET")
+	router.HandleFunc("/{path:.*}", api.Gateway).Methods("POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH")
 	
 	//custom server
 	server:=&http.Server{
@@ -32,7 +32,7 @@ func main(){
 	go func() {
 		log.Println("Start server")
 		if err:= server.ListenAndServe(); err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 	}()
 

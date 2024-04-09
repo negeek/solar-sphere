@@ -52,12 +52,12 @@ func JsonResponse(w http.ResponseWriter, success bool, statusCode int, message s
 
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(Response{
+		StatusCode: statusCode
 		Success:  success,
 		Message: message,
 		Data:    data,
 	})
 }
-
 func Unmarshall(r io.Reader, strct interface{})(error){
 	structType := reflect.TypeOf(strct)
 	if structType.Kind() != reflect.Ptr || structType.Elem().Kind() != reflect.Struct {
