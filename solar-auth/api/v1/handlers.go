@@ -33,7 +33,6 @@ func Auth(w http.ResponseWriter, r *http.Request){
 	user.ID=utils.GenerateUserID(user.Email)
 
 	// Validate device id
-	// TODO. When i am done with the gateway i have to make this make a request to solar-sentinel for device-id verfication
 	saved = model.SaveDeviceID(user.DeviceID)
 	if !saved{
 		utils.JsonResponse(w, false, http.StatusBadRequest , "Invalid device id", nil)

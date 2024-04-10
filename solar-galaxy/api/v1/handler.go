@@ -12,18 +12,19 @@ func HTTPGateway(w http.ResponseWriter, r *http.Request) {
 	*/
 	var(
 		requestInfo = &utils.HTTPRequestInfo{}
-		config = &utils.ServiceConfig{}
+		config = &utils.HTTPServiceConfig{}
 		err error
-		serviceName string
-		request utils.Request
-		response utils.Response
+		service string
+		request utils.HTTPRequest
+		response = &utils.Response{}
 
 	)
 
 	requestInfo = utils.ParseHTTPRequest(r)
-	config, err = utils.ReadConfig()
+	config, err = utils.ReadHTTPConfig()
 	if err != nil{
-		fmt.Println(err.Error())
+		utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
+		return
 	}
 
 	service = strings.Split(requestInfo.OriginalURL, "/")[1]
@@ -32,10 +33,15 @@ func HTTPGateway(w http.ResponseWriter, r *http.Request) {
 	request.Body = requestInfo.Body
 	switch service {
 	case "auth":
-		request.URL = fmt.Sprintf("%s:%v%s", config.Services.Auth.BaseURL, config.Services.Auth.Port, requestInfo.OriginalURL)
-
+		request.URL = fmt.Sprintf("%s%s", config.Services.Auth.BaseURL, requestInfo.OriginalURL)
+	case "sentinel":
+		request.URL = fmt.Sprintf("%s%s", config.Services.Sentinel.BaseURL, requestInfo.OriginalURL)
+	default:
+		utils.JsonResponse(w, false, http.StatusBadRequest , "No such service to process request", nil)
+		return 	
 	}
-	response, err = utils.MakeRequest(&request)
+	
+	response, err = utils.MakeHTTPRequest(&request)
 	if err != nil {
 		utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
 		return 
@@ -43,4 +49,5 @@ func HTTPGateway(w http.ResponseWriter, r *http.Request) {
 
 	utils.JsonResponse(w, response.Success, response.StatusCode, response.Message, response.Data)
 	return
+	
 }

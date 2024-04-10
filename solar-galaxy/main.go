@@ -17,7 +17,7 @@ import (
 func main(){
 	//custom servermutiplexer
 	router := mux.NewRouter()
-	router.HandleFunc("/{path:.*}", api.Gateway).Methods("POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH")
+	router.HandleFunc("/{path:.*}", api.HTTPGateway).Methods("POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH")
 	
 	//custom server
 	server:=&http.Server{

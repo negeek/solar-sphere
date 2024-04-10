@@ -1,6 +1,7 @@
 package utils
 
 import(
+	"io"
 	"io/ioutil"
 	"net/http"
 	"encoding/json"
@@ -12,20 +13,20 @@ func JsonResponse(w http.ResponseWriter, success bool, statusCode int, message s
 
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(Response{
-		StatusCode: statusCode
+		StatusCode: statusCode,
 		Success:  success,
 		Message: message,
 		Data:    data,
 	})
 }
 
-func ReadConfig() (*ServiceConfig, error) {
-	data, err := ioutil.ReadFile("config.yaml")
+func ReadHTTPConfig() (*HTTPServiceConfig, error) {
+	data, err := ioutil.ReadFile("http_config.yaml")
 	if err != nil {
 		return nil, err
 	}
 
-	var config ServiceConfig
+	var config HTTPServiceConfig
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
 		return nil, err
@@ -46,21 +47,17 @@ func ParseHTTPRequest(r *http.Request) *HTTPRequestInfo {
 }
 
 
-func MakeRequest(r *Request)(Response, error){
+func MakeHTTPRequest(r *HTTPRequest)(*Response, error){
 	var (
-		body *bytes.Buffer
+		body io.Reader = r.Body
 		resp = &http.Response{}
-		respBody []bytes
+		respBody []byte
 		err  error
 		respData Response
+		req *http.Request
 	)
-	data, err := ioutil.ReadAll(requestInfo.Body)
-	if err != nil{
-		return nil, error
-	}
-
-	if data != nil {
-		body = bytes.NewBuffer(*data)
+	
+	if body != nil {
 		req, err = http.NewRequest(r.Method, r.URL, body)
 		if err != nil {
 			return nil, err
@@ -71,9 +68,10 @@ func MakeRequest(r *Request)(Response, error){
 			return nil, err
 		}
 	}
+
 	// Add headers
     for headerKey, headerValues := range r.Header{
-		for headerValue:= range headerValues{
+		for _, headerValue:= range headerValues{
 			req.Header.Add(headerKey, headerValue)
 		}
     }

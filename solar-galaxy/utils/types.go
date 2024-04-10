@@ -3,13 +3,13 @@ package utils
 import "io"
 
 type Response struct {
-	StatusCode:	int			`json:"statuscode"`
+	StatusCode	int			`json:"statuscode"`
 	Success  bool        `json:"success"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data"`
 }
 
-type ServiceConfig struct {
+type HTTPServiceConfig struct {
 	Services struct {
 		Auth struct {
 			Port      int    `yaml:"port"`
@@ -34,7 +34,7 @@ type HTTPRequestInfo struct {
 }
 
 
-type Request struct {
+type HTTPRequest struct {
 	Header	map[string][]string
 	Method string
 	URL string

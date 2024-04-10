@@ -24,7 +24,7 @@ func AuthenticationMiddleware(handler http.Handler) http.Handler {
 			utils.JsonResponse(w, false, http.StatusUnauthorized , "Provide access key", nil)
 			return	
 		}
-		// verify the jwt token
+		// Verify the jwt token
 		accessKeyArr = strings.Split(accessKey, " ")
 
 		if len(accessKeyArr) != 2 {
@@ -43,7 +43,7 @@ func AuthenticationMiddleware(handler http.Handler) http.Handler {
 			return	
 		}
 
-		// verify claims 
+		// Verify claims 
 		user.Email=claim.Email
 		exist = model.FindUserByEmail(user)
 		if exist != true {
