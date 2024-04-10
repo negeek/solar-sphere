@@ -24,6 +24,9 @@ Broker URL: `tcp://broker.emqx.io:1883`
 Topic format: `solar-sphere/solar-sentinel/sensor/<device_id>/solar-irradiance`
 
 ### Solar Irradiance Data Download
+
+To access your device readings, here's an example:
+
 `curl -X GET 'http://localhost:8080/sentinel/v1/download/{device_id}' -H 'Content-Type: application/json' -H 'Authorisation: Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJFbWFpbCI6ImFkYW5pbmlwYXRyaWNrMTdAZ21haWwuY29tIiwiRGF0ZVRpbWUiOiIyMDI0LTA0LTEwVDIyOjM3OjI3LjE4Mjk4ODE2M1oifQ.hT1jaG92Kcpj1rvPVjq4i-YB21yq8ugRB4suUYOQhCN5IpFhDkSqcbU4nmDuOieCjedtb7pLvaBKfyzvw01xAg'`
 
 
