@@ -11,12 +11,14 @@ import (
 	"github.com/gorilla/mux"
 	//"github.com/joho/godotenv"
 	api"github.com/negeek/solar-sphere/solar-galaxy/api/v1"
+	v1middlewares "github.com/negeek/solar-sphere/solar-galaxy/middlewares/v1"
 		)
 
 
 func main(){
 	//custom servermutiplexer
 	router := mux.NewRouter()
+	router.Use(v1middlewares.CORS)
 	router.HandleFunc("/{path:.*}", api.HTTPGateway).Methods("POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH")
 	
 	//custom server

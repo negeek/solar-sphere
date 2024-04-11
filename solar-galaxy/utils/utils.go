@@ -51,9 +51,7 @@ func MakeHTTPRequest(r *HTTPRequest)(*http.Response, error){
 	var (
 		body io.Reader = r.Body
 		resp = &http.Response{}
-		//respBody []byte
 		err  error
-		//respData Response
 		req *http.Request
 	)
 	
@@ -82,5 +80,5 @@ func MakeHTTPRequest(r *HTTPRequest)(*http.Response, error){
 		return nil, err
 	}
 	return resp, nil
-	
+
 }
