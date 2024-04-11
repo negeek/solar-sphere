@@ -6,14 +6,53 @@ import (
 	"time"
 	"context"
 	"syscall"
+	"strings"
+	"encoding/json"
 	"net/http"
     "os/signal"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
-	v1routes "github.com/negeek/solar-sphere/solar-sentinel/api/v1"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/negeek/solar-sphere/solar-sentinel/db"
+    irr"github.com/negeek/solar-sphere/solar-sentinel/api/v1"
+	v1routes "github.com/negeek/solar-sphere/solar-sentinel/api/v1"
 	v1middlewares "github.com/negeek/solar-sphere/solar-sentinel/middlewares/v1"
+	
 )
+
+var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
+	var payloadMap map[string]interface{}
+	topic:=msg.Topic()
+	payload:=msg.Payload()
+	log.Printf("Received message: %s from topic: %s\n", payload, topic)
+    device_id:= strings.Split(topic, "/")[3]
+	err := json.Unmarshal(payload, &payloadMap)
+	if err != nil {
+		log.Fatal("Invalid msg format")
+	}
+    err = irr.SaveSolarIrrdianceData(device_id, payloadMap)
+	if err != nil {
+		log.Fatal("Unable to save data")
+	}
+
+}
+
+var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
+    log.Println("Mqtt Connected")
+}
+
+var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
+    log.Printf("Mqtt Connection lost: %v", err)
+}
+
+func suscribeToTopic(client mqtt.Client, topic string, qos byte, msgH mqtt.MessageHandler) {
+    token := client.Subscribe(topic, qos, msgH)
+    if token.Wait() && token.Error() != nil{
+		log.Println(token.Error())
+	}
+  	log.Printf("Subscribed to topic: %s", topic)
+}
+
 
 func main() {
 	appEnv:=os.Getenv("APP_ENV")
@@ -47,6 +86,21 @@ func main() {
 		log.Fatal(err)
 	}
 	
+	// Connect to broker and suscribe to topic
+    opts := mqtt.NewClientOptions()
+    opts.AddBroker(os.Getenv("BROKER_URL"))
+    opts.SetClientID(os.Getenv("MQTT_CLIENT_ID"))
+    opts.SetUsername(os.Getenv("MQTT_USERNAME"))
+    opts.SetPassword(os.Getenv("MQTT_PASSWORD"))
+    opts.SetDefaultPublishHandler(messagePubHandler)
+    opts.OnConnect = connectHandler
+    opts.OnConnectionLost = connectLostHandler
+    client := mqtt.NewClient(opts)
+    if token := client.Connect(); token.Wait() && token.Error() != nil {
+        log.Println(token.Error())
+    }
+    suscribeToTopic(client, os.Getenv("MQTT_TOPIC"), 0, nil)
+
     go func() {
 		log.Println("Start server")
 		if err:= server.ListenAndServe(); err != nil {
@@ -55,16 +109,22 @@ func main() {
 	}()
 
     c := make(chan os.Signal, 1)
+	
 	// accept graceful shutdowns when quit via SIGINT (Ctrl+C)
 	// SIGKILL will not be caught.
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
 	// Block until we receive our signal.
 	<-c
+
 	// Create a deadline to wait for.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	// disconnect db
+
+	// Disconnect
 	db.Disconnect(dbctx,dbcancel)
+	log.Println("Disconnect from broker")
+    client.Disconnect(250)
     server.Shutdown(ctx)
 	os.Exit(0)
 }

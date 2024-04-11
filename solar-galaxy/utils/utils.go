@@ -47,13 +47,13 @@ func ParseHTTPRequest(r *http.Request) *HTTPRequestInfo {
 }
 
 
-func MakeHTTPRequest(r *HTTPRequest)(*Response, error){
+func MakeHTTPRequest(r *HTTPRequest)(*http.Response, error){
 	var (
 		body io.Reader = r.Body
 		resp = &http.Response{}
-		respBody []byte
+		//respBody []byte
 		err  error
-		respData Response
+		//respData Response
 		req *http.Request
 	)
 	
@@ -81,16 +81,6 @@ func MakeHTTPRequest(r *HTTPRequest)(*Response, error){
 	if err != nil {
 		return nil, err
 	}
+	return resp, nil
 	
-	respBody, err = ioutil.ReadAll(resp.Body)
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-	
-	err = json.Unmarshal(respBody, &respData)
-	if err != nil {
-		return nil, err
-	}
-	return &respData, nil
 }

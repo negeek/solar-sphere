@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"io/ioutil"
+	"encoding/json"
 	"net/http"
 	"fmt"
 	"strings"
@@ -16,7 +18,9 @@ func HTTPGateway(w http.ResponseWriter, r *http.Request) {
 		err error
 		service string
 		request utils.HTTPRequest
-		response = &utils.Response{}
+		resp = &http.Response{}
+		respBody []byte
+		respData = &utils.Response{}
 
 	)
 
@@ -31,6 +35,8 @@ func HTTPGateway(w http.ResponseWriter, r *http.Request) {
 	request.Header = requestInfo.Header
 	request.Method = requestInfo.Method
 	request.Body = requestInfo.Body
+
+	// Get the right URL of service
 	switch service {
 	case "auth":
 		request.URL = fmt.Sprintf("%s%s", config.Services.Auth.BaseURL, requestInfo.OriginalURL)
@@ -40,14 +46,58 @@ func HTTPGateway(w http.ResponseWriter, r *http.Request) {
 		utils.JsonResponse(w, false, http.StatusBadRequest , "No such service to process request", nil)
 		return 	
 	}
-	
-	response, err = utils.MakeHTTPRequest(&request)
+
+	resp, err = utils.MakeHTTPRequest(&request)
 	if err != nil {
 		utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
-		return 
+	 	return 
 	}
 
-	utils.JsonResponse(w, response.Success, response.StatusCode, response.Message, response.Data)
-	return
+	if resp.Close{
+		defer resp.Body.Close()
+	}
+
+	// Let's treat content-types differently
+	contentType := resp.Header.Get("Content-Type")
+    switch contentType {
+	case "application/json":
+		respBody, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
+	 		return 
+		}
+
+		err = json.Unmarshal(respBody, &respData) 
+		if err != nil {
+			utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
+	 		return 
+		}
+
+		utils.JsonResponse(w, respData.Success, respData.StatusCode, respData.Message, respData.Data)
+	 	return
+
+	case "text/csv":
+		respBody, err = ioutil.ReadAll(resp.Body)
+        if err != nil {
+            utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
+	 		return
+        }
+
+		// Re-use the service headers
+		for headerKey, headerValues := range resp.Header{
+			for _, headerValue:= range headerValues{
+				w.Header().Set(headerKey, headerValue)
+			}
+		}
+		_, err = w.Write(respBody)
+		if err != nil {
+			utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
+			return
+		}
+
+	default:
+		utils.JsonResponse(w, false, http.StatusBadGateway ,"Unrecognised Content-Type", nil)
+	 	return 
+	}	
 	
 }
