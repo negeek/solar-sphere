@@ -1,80 +1,82 @@
 package main
 
 import (
-	"os"
-	"log"
-	"time"
 	"context"
-	"syscall"
 	"net/http"
-    "os/signal"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
-	"github.com/negeek/solar-sphere/solar-auth/db"
-	v1routes "github.com/negeek/solar-sphere/solar-auth/api/v1"
-	v1middlewares "github.com/negeek/solar-sphere/solar-auth/middlewares/v1"
-		)
 
+	v1 "github.com/negeek/solar-sphere/solar-auth/api/v1"
+	repo "github.com/negeek/solar-sphere/solar-auth/repository/v1"
+	service "github.com/negeek/solar-sphere/solar-auth/service/v1"
+	"github.com/negeek/solar-sphere/solar-spectrum/env"
+	"github.com/negeek/solar-sphere/solar-spectrum/httpapi"
+	"github.com/negeek/solar-sphere/solar-spectrum/logging"
+	"github.com/negeek/solar-sphere/solar-spectrum/mongoutil"
+)
 
-func main(){
-	appEnv:=os.Getenv("APP_ENV")
-	if appEnv=="dev"{
-		err := godotenv.Load(".env")
-		if err != nil {
-			log.Fatal("Error loading .env file")
+func main() {
+	if os.Getenv("APP_ENV") == "dev" {
+		if err := env.Load(".env"); err != nil {
+			panic("solar-auth: loading .env: " + err.Error())
 		}
 	}
-	//custom servermutiplexer
-	router := mux.NewRouter()
-	router.Use(v1middlewares.CORS)
-	v1routes.Routes(router.StrictSlash(true))
-	
-	// DB connection
-	dbUrl:= os.Getenv("DATABASE_URL")
-	dbName:=os.Getenv("DB_NAME")
-	log.Println("Connecting to db")
-	dbctx, dbcancel, err:= db.Connect(dbUrl,dbName)
+
+	log := logging.New("solar-auth")
+
+	ctx := context.Background()
+	client, db, err := mongoutil.Connect(ctx, os.Getenv("DATABASE_URL"), os.Getenv("DB_NAME"))
 	if err != nil {
-		log.Fatal(err)
+		log.Error("connect to mongo", "error", err)
+		os.Exit(1)
 	}
-	
-	
-	//custom server
-	server:=&http.Server{
-		Addr: ":3000",
-		Handler: router,
+	log.Info("connected to mongo")
+
+	repository := repo.NewRepository(db)
+	authService := service.NewAuthService(repository, os.Getenv("SIGNING_KEY"), os.Getenv("VERIFICATION_KEY"))
+	handler := v1.NewHandler(authService)
+
+	router := mux.NewRouter()
+	router.Use(httpapi.CORS)
+	v1.Routes(router.StrictSlash(true), handler)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      router,
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
-		IdleTimeout:  60 *  time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
-	// Run server in a goroutine so that it doesn't block.
 	go func() {
-		log.Println("Start server")
-		if err:= server.ListenAndServe(); err != nil {
-			log.Fatal(err)
+		log.Info("starting server", "port", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
-	c := make(chan os.Signal, 1)
-	// accept graceful shutdowns when quit via SIGINT (Ctrl+C)
-	// SIGKILL will not be caught.
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
 
-	// Block until we receive our signal.
-	<-c
-	// disconnect db
-	db.Disconnect(dbctx,dbcancel)
-
-	// Create a deadline to wait for.
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	
-	// Doesn't block if no connections, but will otherwise wait
-	// until the timeout deadline.
-	server.Shutdown(ctx)
 
-	log.Println("Shutting down server")
-	os.Exit(0)
+	if err := mongoutil.Disconnect(shutdownCtx, client, 15*time.Second); err != nil {
+		log.Error("disconnect mongo", "error", err)
+	}
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Error("server shutdown", "error", err)
+	}
 
+	log.Info("shut down")
 }
