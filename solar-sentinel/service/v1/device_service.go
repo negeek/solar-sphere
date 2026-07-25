@@ -7,16 +7,21 @@ package v1
 import (
 	"context"
 
-	repo "github.com/negeek/solar-sphere/solar-sentinel/repository/v1"
 	"github.com/negeek/solar-sphere/solar-spectrum/idgen"
 	"github.com/negeek/solar-sphere/solar-spectrum/shared"
 )
 
-type DeviceService struct {
-	repo *repo.Repository
+// deviceRepository is the subset of the repository DeviceService needs, so
+// it can be tested against a hand-written fake instead of a real database.
+type deviceRepository interface {
+	CreateDevice(ctx context.Context, d *shared.Device) error
 }
 
-func NewDeviceService(r *repo.Repository) *DeviceService {
+type DeviceService struct {
+	repo deviceRepository
+}
+
+func NewDeviceService(r deviceRepository) *DeviceService {
 	return &DeviceService{repo: r}
 }
 

@@ -7,16 +7,24 @@ import (
 	"sort"
 	"time"
 
-	repo "github.com/negeek/solar-sphere/solar-sentinel/repository/v1"
 	"github.com/negeek/solar-sphere/solar-spectrum/shared"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type IrradianceService struct {
-	repo *repo.Repository
+// irradianceRepository is the subset of the repository IrradianceService
+// needs, so it can be tested against a hand-written fake instead of a real
+// database.
+type irradianceRepository interface {
+	FindDeviceByID(ctx context.Context, id string) (*shared.Device, error)
+	CreateIrradianceReading(ctx context.Context, reading *shared.SolarIrradiance) error
+	FindIrradianceByDevice(ctx context.Context, deviceID string) ([]shared.SolarIrradiance, error)
 }
 
-func NewIrradianceService(r *repo.Repository) *IrradianceService {
+type IrradianceService struct {
+	repo irradianceRepository
+}
+
+func NewIrradianceService(r irradianceRepository) *IrradianceService {
 	return &IrradianceService{repo: r}
 }
 
