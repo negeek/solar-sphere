@@ -1,59 +1,76 @@
 package main
 
 import (
-	"log"
-	"net/http"
-	"time"
-	"os"
-    "os/signal"
 	"context"
+	"net/http"
+	"os"
+	"os/signal"
 	"syscall"
+	"time"
+
 	"github.com/gorilla/mux"
-	//"github.com/joho/godotenv"
-	api"github.com/negeek/solar-sphere/solar-galaxy/api/v1"
-	v1middlewares "github.com/negeek/solar-sphere/solar-galaxy/middlewares/v1"
-		)
 
+	gateway "github.com/negeek/solar-sphere/solar-galaxy/api/v1"
+	"github.com/negeek/solar-sphere/solar-spectrum/env"
+	"github.com/negeek/solar-sphere/solar-spectrum/httpapi"
+	"github.com/negeek/solar-sphere/solar-spectrum/logging"
+)
 
-func main(){
-	//custom servermutiplexer
-	router := mux.NewRouter()
-	router.Use(v1middlewares.CORS)
-	router.HandleFunc("/{path:.*}", api.HTTPGateway).Methods("POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH")
-	
-	//custom server
-	server:=&http.Server{
-		Addr: ":8080",
-		Handler: router,
-		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second,
-		IdleTimeout:  60 *  time.Second,
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func main() {
+	if os.Getenv("APP_ENV") == "dev" {
+		if err := env.Load(".env"); err != nil {
+			panic("solar-galaxy: loading .env: " + err.Error())
+		}
 	}
 
-	// Run server in a goroutine so that it doesn't block.
+	log := logging.New("solar-galaxy")
+
+	// Base URLs are env-driven so the same binary resolves backends by
+	// localhost in local dev and by Docker service name in docker-compose.
+	serviceBaseURLs := map[string]string{
+		"auth":     envOr("AUTH_BASE_URL", "http://localhost:3000"),
+		"sentinel": envOr("SENTINEL_BASE_URL", "http://localhost:5000"),
+	}
+	gw := gateway.NewGateway(serviceBaseURLs)
+
+	router := mux.NewRouter()
+	router.Use(httpapi.CORS)
+	router.HandleFunc("/{path:.*}", gw.Handle).Methods("POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH")
+
+	port := envOr("PORT", "8080")
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      router,
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
 	go func() {
-		log.Println("Start server")
-		if err:= server.ListenAndServe(); err != nil {
-			log.Println(err)
+		log.Info("starting server", "port", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
-	c := make(chan os.Signal, 1)
-	// accept graceful shutdowns when quit via SIGINT (Ctrl+C)
-	// SIGKILL will not be caught.
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
 
-	// Block until we receive our signal.
-	<-c
-
-	// Create a deadline to wait for.
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	// Doesn't block if no connections, but will otherwise wait
-	// until the timeout deadline.
-	server.Shutdown(ctx)
 
-	log.Println("Shutting down")
-	os.Exit(0)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Error("server shutdown", "error", err)
+	}
 
+	log.Info("shut down")
 }

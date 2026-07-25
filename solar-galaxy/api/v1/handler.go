@@ -1,103 +1,109 @@
+// Package gateway reverse-proxies incoming requests to the right backend
+// service and normalizes the response. This is intentionally hand-rolled
+// rather than built on net/http/httputil.ReverseProxy.
 package gateway
 
 import (
-	"io/ioutil"
 	"encoding/json"
-	"net/http"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
-	"github.com/negeek/solar-sphere/solar-galaxy/utils"
+
+	"github.com/negeek/solar-sphere/solar-spectrum/httpapi"
 )
-func HTTPGateway(w http.ResponseWriter, r *http.Request) {
-	/* 
-		This is basically getting the requests and rerouting it to the right microservice. Then the response is given as response too.
-	*/
-	var(
-		requestInfo = &utils.HTTPRequestInfo{}
-		config = &utils.HTTPServiceConfig{}
-		err error
-		service string
-		request utils.HTTPRequest
-		resp = &http.Response{}
-		respBody []byte
-		respData = &utils.Response{}
 
-	)
+// Gateway routes requests by their first path segment ("auth", "sentinel",
+// ...) to the matching backend base URL.
+type Gateway struct {
+	serviceBaseURLs map[string]string
+}
 
-	requestInfo = utils.ParseHTTPRequest(r)
-	config, err = utils.ReadHTTPConfig()
-	if err != nil{
-		utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
+func NewGateway(serviceBaseURLs map[string]string) *Gateway {
+	return &Gateway{serviceBaseURLs: serviceBaseURLs}
+}
+
+func (g *Gateway) Handle(w http.ResponseWriter, r *http.Request) {
+	originalURL := r.URL.RequestURI()
+
+	service := strings.Split(originalURL, "/")[1]
+	baseURL, ok := g.serviceBaseURLs[service]
+	if !ok {
+		httpapi.JsonResponse(w, false, http.StatusBadRequest, "No such service to process request", nil)
 		return
 	}
 
-	service = strings.Split(requestInfo.OriginalURL, "/")[1]
-	request.Header = requestInfo.Header
-	request.Method = requestInfo.Method
-	request.Body = requestInfo.Body
-
-	// Get the right URL of service
-	switch service {
-	case "auth":
-		request.URL = fmt.Sprintf("%s%s", config.Services.Auth.BaseURL, requestInfo.OriginalURL)
-	case "sentinel":
-		request.URL = fmt.Sprintf("%s%s", config.Services.Sentinel.BaseURL, requestInfo.OriginalURL)
-	default:
-		utils.JsonResponse(w, false, http.StatusBadRequest , "No such service to process request", nil)
-		return 	
+	upstream := &upstreamRequest{
+		Header: r.Header,
+		Method: r.Method,
+		URL:    fmt.Sprintf("%s%s", baseURL, originalURL),
+		Body:   r.Body,
 	}
 
-	resp, err = utils.MakeHTTPRequest(&request)
+	resp, err := doUpstreamRequest(upstream)
 	if err != nil {
-		utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
-	 	return 
+		httpapi.JsonResponse(w, false, http.StatusBadGateway, err.Error(), nil)
+		return
 	}
+	defer resp.Body.Close()
 
-	if resp.Close{
-		defer resp.Body.Close()
-	}
-
-	// Let's treat content-types differently
-	contentType := resp.Header.Get("Content-Type")
-    switch contentType {
+	switch resp.Header.Get("Content-Type") {
 	case "application/json":
-		respBody, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
-	 		return 
-		}
-
-		err = json.Unmarshal(respBody, &respData) 
-		if err != nil {
-			utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
-	 		return 
-		}
-
-		utils.JsonResponse(w, respData.Success, respData.StatusCode, respData.Message, respData.Data)
-	 	return
-
+		proxyJSON(w, resp)
 	case "text/csv":
-		respBody, err = ioutil.ReadAll(resp.Body)
-        if err != nil {
-            utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
-	 		return
-        }
-
-		// Re-use the service headers
-		for headerKey, headerValues := range resp.Header{
-			for _, headerValue:= range headerValues{
-				w.Header().Set(headerKey, headerValue)
-			}
-		}
-		_, err = w.Write(respBody)
-		if err != nil {
-			utils.JsonResponse(w, false, http.StatusBadGateway , err.Error(), nil)
-			return
-		}
-
+		proxyCSV(w, resp)
 	default:
-		utils.JsonResponse(w, false, http.StatusBadGateway ,"Unrecognised Content-Type", nil)
-	 	return 
-	}	
-	
+		httpapi.JsonResponse(w, false, http.StatusBadGateway, "Unrecognised Content-Type", nil)
+	}
+}
+
+func proxyJSON(w http.ResponseWriter, resp *http.Response) {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		httpapi.JsonResponse(w, false, http.StatusBadGateway, err.Error(), nil)
+		return
+	}
+
+	var data httpapi.Response
+	if err := json.Unmarshal(body, &data); err != nil {
+		httpapi.JsonResponse(w, false, http.StatusBadGateway, err.Error(), nil)
+		return
+	}
+
+	httpapi.JsonResponse(w, data.Success, data.StatusCode, data.Message, data.Data)
+}
+
+func proxyCSV(w http.ResponseWriter, resp *http.Response) {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		httpapi.JsonResponse(w, false, http.StatusBadGateway, err.Error(), nil)
+		return
+	}
+
+	for headerKey, headerValues := range resp.Header {
+		for _, headerValue := range headerValues {
+			w.Header().Add(headerKey, headerValue)
+		}
+	}
+	w.Write(body)
+}
+
+type upstreamRequest struct {
+	Header http.Header
+	Method string
+	URL    string
+	Body   io.Reader
+}
+
+func doUpstreamRequest(u *upstreamRequest) (*http.Response, error) {
+	req, err := http.NewRequest(u.Method, u.URL, u.Body)
+	if err != nil {
+		return nil, err
+	}
+	for headerKey, headerValues := range u.Header {
+		for _, headerValue := range headerValues {
+			req.Header.Add(headerKey, headerValue)
+		}
+	}
+	return http.DefaultClient.Do(req)
 }
