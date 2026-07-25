@@ -1,0 +1,8 @@
+go 1.26
+
+use (
+	./solar-auth
+	./solar-galaxy
+	./solar-sentinel
+	./solar-spectrum
+)

@@ -1,6 +1,6 @@
 module github.com/negeek/solar-sphere/solar-auth
 
-go 1.21.5
+go 1.26
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.0
