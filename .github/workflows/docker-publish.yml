@@ -1,0 +1,75 @@
+# Builds and publishes solar-auth, solar-sentinel, and solar-galaxy to a
+# single Docker Hub repo, distinguished by tag prefix (auth-*, sentinel-*,
+# galaxy-*), on every push to main.
+#
+# Configure under Settings -> Secrets and variables -> Actions:
+#   Variables (not secret - these are just config):
+#     DOCKERHUB_USERNAME  your Docker Hub username, e.g. "negeek"
+#     DOCKERHUB_REPO      optional, defaults to "solar-sphere" if unset
+#   Secrets:
+#     DOCKERHUB_TOKEN     a Docker Hub access token (Account Settings ->
+#                         Security -> New Access Token) - not your password
+name: Publish Docker images
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: solar-auth
+            tag: auth
+          - service: solar-sentinel
+            tag: sentinel
+          - service: solar-galaxy
+            tag: galaxy
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, so `git describe` can find tags
+
+      - name: Determine image tags
+        id: meta
+        env:
+          IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/${{ vars.DOCKERHUB_REPO || 'solar-sphere' }}
+          SERVICE: ${{ matrix.tag }}
+        run: |
+          tags="$IMAGE:$SERVICE-latest
+          $IMAGE:$SERVICE-${{ github.sha }}"
+          # If this commit is exactly a git tag (e.g. v1.2.0), publish a
+          # matching versioned image tag too.
+          if version=$(git describe --tags --exact-match 2>/dev/null); then
+            tags="$tags
+          $IMAGE:$SERVICE-$version"
+          fi
+          {
+            echo "tags<<TAGSEOF"
+            echo "$tags"
+            echo "TAGSEOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}

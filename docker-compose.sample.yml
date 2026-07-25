@@ -1,0 +1,93 @@
+# Sample compose file for self-hosting with pre-built images from Docker
+# Hub instead of building from source (no Go toolchain needed, works on ARM
+# boards like a Raspberry Pi too — images are published for linux/amd64 and
+# linux/arm64). Copy this file (and mosquitto/mosquitto.conf, and a .env)
+# and adjust the image names if you're using your own Docker Hub account —
+# see the README's "Self-hosting with pre-built images" section.
+#
+#   cp .env.example .env   # then fill in SIGNING_KEY/VERIFICATION_KEY
+#   docker compose -f docker-compose.sample.yml up
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
+  auth-migrate:
+    image: negeek/solar-sphere:auth-latest
+    entrypoint: ["/migrate"]
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  auth:
+    image: negeek/solar-sphere:auth-latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      auth-migrate:
+        condition: service_completed_successfully
+
+  sentinel-migrate:
+    image: negeek/solar-sphere:sentinel-latest
+    entrypoint: ["/migrate"]
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  sentinel:
+    image: negeek/solar-sphere:sentinel-latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "5000"
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+      sentinel-migrate:
+        condition: service_completed_successfully
+
+  galaxy:
+    image: negeek/solar-sphere:galaxy-latest
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      AUTH_BASE_URL: http://auth:3000
+      SENTINEL_BASE_URL: http://sentinel:5000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth
+      - sentinel
+
+volumes:
+  mongo-data:
+  mosquitto-data:

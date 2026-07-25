@@ -66,16 +66,36 @@ solar-spectrum: shared library (types, env/log/http/JWT/Mongo helpers,
 
 ## Self-hosting (Docker)
 
-Requires Docker and Docker Compose.
+Requires Docker and Docker Compose. Two ways to do it:
+
+### Build from source
 
 ```bash
+git clone https://github.com/negeek/solar-sphere.git && cd solar-sphere
 cp .env.example .env
 go run ./solar-spectrum/cmd/keygen   # prints SIGNING_KEY and VERIFICATION_KEY — paste both into .env
 docker compose up --build
 ```
 
-This starts MongoDB, an MQTT broker (Mosquitto), and all three services,
-applying database migrations automatically before each service starts.
+### Self-hosting with pre-built images
+
+Every push to `main` publishes multi-arch (amd64/arm64 — including
+Raspberry Pi) images to Docker Hub under `negeek/solar-sphere`, tagged
+`auth-latest`, `sentinel-latest`, and `galaxy-latest`. You still need a
+local clone to run the keygen command and to get `docker-compose.sample.yml`
+and `mosquitto/mosquitto.conf`, but nothing gets built locally — Compose
+just pulls the published images:
+
+```bash
+git clone https://github.com/negeek/solar-sphere.git && cd solar-sphere
+cp .env.example .env
+go run ./solar-spectrum/cmd/keygen   # paste SIGNING_KEY/VERIFICATION_KEY into .env
+docker compose -f docker-compose.sample.yml up
+```
+
+Either way, this starts MongoDB, an MQTT broker (Mosquitto), and all three
+services, applying database migrations automatically before each service
+starts.
 
 | Service        | Port |
 |----------------|------|
@@ -175,6 +195,17 @@ TEST_DATABASE_URL=mongodb://localhost:27017 go test ./...
 
 Each of those tests uses its own throwaway database and drops it in
 cleanup.
+
+## Publishing images (for maintainers/forks)
+
+`.github/workflows/docker-publish.yml` builds and pushes all three images
+to Docker Hub on every push to `main`. To enable it on a fork, set under
+*Settings → Secrets and variables → Actions*:
+
+- Variables: `DOCKERHUB_USERNAME` (required), `DOCKERHUB_REPO` (optional,
+  defaults to `solar-sphere`)
+- Secrets: `DOCKERHUB_TOKEN` — a Docker Hub access token, not your password
+  (Docker Hub → Account Settings → Security → New Access Token)
 
 ## Notes on the security model
 
