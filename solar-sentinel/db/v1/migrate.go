@@ -1,144 +1,84 @@
+// Command migrate applies solar-sentinel's MongoDB schema migrations.
 package main
 
 import (
-    "errors"
-    "log"
-    "os"
-    "os/exec"
-    "path/filepath"
-	"plugin"
-	"runtime"
-	"strings"
+	"context"
+	"os"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/negeek/solar-sphere/solar-spectrum/env"
+	"github.com/negeek/solar-sphere/solar-spectrum/logging"
+	"github.com/negeek/solar-sphere/solar-spectrum/migrate"
+	"github.com/negeek/solar-sphere/solar-spectrum/mongoutil"
+	"github.com/negeek/solar-sphere/solar-spectrum/shared"
 )
 
-var MigrationDir string =  "/db_migrations/migration_files"
-var MigratedDir string = "/db_migrations/migrated_files"
-var TrackedChanges int = 0
-
-func getThisFileDir() string {
-    // Get the caller's PC (program counter)
-    pc, _, _, ok := runtime.Caller(1)
-    if !ok {
-		log.Fatal("Unable to get caller information")
-        return ""
-    }
-
-    // Get the function name and file path of the caller
-    funcInfo := runtime.FuncForPC(pc)
-    if funcInfo == nil {
-		log.Fatal("Unable to get caller function information")
-        return ""
-    }
-
-    // Retrieve the file name of the caller
-    fullPath, _ := funcInfo.FileLine(pc)
-
-    // Exclude this file itself in the path
-	fullPathArr := strings.Split(fullPath,"/")
-	Path := strings.Join(fullPathArr[0:len(fullPathArr)-1],"/")
-
-    return Path
+var migrations = []migrate.Migration{
+	{
+		Name: "000001_create_device_collection",
+		Up: func(ctx context.Context, db *mongo.Database) error {
+			validator := bson.M{
+				"$jsonSchema": bson.M{
+					"bsonType": "object",
+					"required": []string{"_id", "name", "owner"},
+					"properties": bson.M{
+						"_id":   bson.M{"bsonType": "string", "description": "id is required and must be a string"},
+						"name":  bson.M{"bsonType": "string", "description": "name is required and must be a string"},
+						"owner": bson.M{"bsonType": "string", "description": "owner is required and must be a string"},
+					},
+				},
+			}
+			if err := db.CreateCollection(ctx, shared.DEVICE_COLLECTION, options.CreateCollection().SetValidator(validator)); err != nil {
+				return err
+			}
+			// Not unique: a user can own more than one device.
+			_, err := db.Collection(shared.DEVICE_COLLECTION).Indexes().CreateOne(ctx, mongo.IndexModel{
+				Keys: bson.D{{Key: "owner", Value: 1}},
+			})
+			return err
+		},
+	},
+	{
+		Name: "000002_create_solar_irradiance_collection",
+		Up: func(ctx context.Context, db *mongo.Database) error {
+			if err := db.CreateCollection(ctx, shared.IRR_COLLECTION); err != nil {
+				return err
+			}
+			// Every read of this collection filters by device_id
+			// (downloads, MQTT ingestion's device check) — without this
+			// index those become full collection scans as data grows.
+			_, err := db.Collection(shared.IRR_COLLECTION).Indexes().CreateOne(ctx, mongo.IndexModel{
+				Keys: bson.D{{Key: "device_id", Value: 1}},
+			})
+			return err
+		},
+	},
 }
 
-func Migrate() error {
-	migrationDir:=filepath.Join(getThisFileDir(), MigrationDir)
-    // This function is to go to the migrations folder and run the MakeMigration() functions in each file.
-    return filepath.Walk(migrationDir, func(path string, info os.FileInfo, err error) error {
-        if err != nil {
-            log.Fatal(err)
-            return err
-        }
-        if !info.IsDir() && filepath.Ext(path) == ".go" {
-            migrated, err := skipAlreadyMigrated(path)
-            if err != nil {
-                log.Fatal(err)
-                return err
-            }
-            if !migrated {
-                TrackedChanges+=1
-                log.Printf("Migrating: %s\n", filepath.Base(path))
-                if err := executeMakeMigrationFunction(path); err != nil {
-                    log.Fatal(err)
-                    return err
-                }
-                log.Printf("Migrated: %s\n", filepath.Base(path))
-            }
-        }
-        return nil
-    })
-}
-
-func executeMakeMigrationFunction(filePath string) error {
-    // Load the compiled Go file as a plugin
-    pluginPath, err := compileGoFile(filePath)
-    if err != nil {
-        return err
-    }
-    p, err := plugin.Open(pluginPath)
-    if err != nil {
-        return err
-    }
-
-    // Look up the MakeMigration symbol
-    makeMigrationFunc, err := p.Lookup("MakeMigration")
-    if err != nil {
-        return err
-    }
-
-    // Call the MakeMigration function
-    if makeMigrationFunc != nil {
-        if fn, ok := makeMigrationFunc.(func()); ok {
-            fn()
-        } else {
-            return errors.New("MakeMigration is not a function")
-        }
-    } else {
-        return errors.New("MakeMigration function not found")
-    }
-
-    return nil
-}
-
-func compileGoFile(filePath string) (string, error) {
-    // Define the output directory for compiled binaries
-	migratedDir:= filepath.Join(getThisFileDir(), MigratedDir)
-    if err := os.MkdirAll(migratedDir, 0755); err != nil {
-        return "", err
-    }
-    // Define the output file name for the compiled binary
-    outFile := filepath.Join(migratedDir, filepath.Base(filePath))
-    // Run the 'go build' command to compile the Go file into a binary
-    cmd := exec.Command("go", "build", "-buildmode=plugin", "-o", outFile, filePath)
-    cmd.Stderr = os.Stderr
-    if err := cmd.Run(); err != nil {
-        return "", errors.New("Failed to compile")
-    }
-
-    return outFile, nil
-}
-
-func skipAlreadyMigrated(filePath string) (bool, error) {
-	migratedDir:= filepath.Join(getThisFileDir(), MigratedDir)
-	fileName:=filepath.Base(filePath)
-    compiledFilePath := filepath.Join(migratedDir, fileName)
-    // Check if the file exists
-    if _, err := os.Stat(compiledFilePath); err == nil {
-        return true, nil
-    } else if os.IsNotExist(err) {
-        return false, nil
-    } else {
-        return false, err
-    }
-}
-
-func main(){
-	err := Migrate()
-	if err != nil{
-		log.Fatal(err)
+func main() {
+	if os.Getenv("APP_ENV") == "dev" {
+		if err := env.Load(".env"); err != nil {
+			panic("solar-sentinel migrate: loading .env: " + err.Error())
+		}
 	}
-    if TrackedChanges < 1 {
-        log.Println("No changes made")
-    } else {
-        log.Println(TrackedChanges, " changes made")
-    }
+
+	log := logging.New("solar-sentinel-migrate")
+	ctx := context.Background()
+
+	client, db, err := mongoutil.Connect(ctx, os.Getenv("DATABASE_URL"), os.Getenv("DB_NAME"))
+	if err != nil {
+		log.Error("connect to mongo", "error", err)
+		os.Exit(1)
+	}
+	defer mongoutil.Disconnect(context.Background(), client, 15*time.Second)
+
+	if err := migrate.Run(ctx, db, migrations); err != nil {
+		log.Error("migration failed", "error", err)
+		os.Exit(1)
+	}
+	log.Info("migrations up to date")
 }
