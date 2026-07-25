@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/negeek/solar-sphere/solar-spectrum/idgen"
 )
 
 // Claims is the JWT payload carried by a solar-sphere access key.
@@ -36,6 +38,12 @@ func Generate(email string, signingKeyHex string, opts GenerateOptions) (string,
 	now := time.Now().UTC()
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			// ID makes every token unique even if two are issued for the
+			// same email within the same second: EdDSA signing is
+			// deterministic, so without it, two otherwise-identical claims
+			// (same email, same truncated-to-the-second IssuedAt, no
+			// expiry) would sign to the exact same token string.
+			ID:       idgen.New(""),
 			IssuedAt: jwt.NewNumericDate(now),
 		},
 		Email: email,
