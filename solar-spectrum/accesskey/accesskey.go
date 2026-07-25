@@ -30,6 +30,10 @@ type GenerateOptions struct {
 // Generate mints a new access key for email, signed with signingKeyHex (a
 // hex-encoded ed25519 private key).
 func Generate(email string, signingKeyHex string, opts GenerateOptions) (string, error) {
+	if opts.ExpiresIn < 0 {
+		return "", errors.New("accesskey: ExpiresIn must not be negative")
+	}
+
 	signingKey, err := hex.DecodeString(signingKeyHex)
 	if err != nil {
 		return "", errors.New("accesskey: invalid signing key")
