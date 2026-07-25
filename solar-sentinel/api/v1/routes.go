@@ -1,13 +1,14 @@
 package v1
 
 import (
+	"net/http"
+
 	"github.com/gorilla/mux"
-	v1middlewares "github.com/negeek/solar-sphere/solar-sentinel/middlewares/v1"
 )
 
-func Routes(r *mux.Router) {
+func Routes(r *mux.Router, h *Handler, authMiddleware func(http.Handler) http.Handler) {
 	router := r.PathPrefix("/sentinel/v1").Subrouter()
-	router.Use(v1middlewares.AuthenticationMiddleware)
-	router.HandleFunc("/device/", CreateDeviceID).Methods("POST")
-	router.HandleFunc("/download/{device_id}", DownloadSolarIrrData).Methods("GET")
+	router.Use(authMiddleware)
+	router.HandleFunc("/device/", h.CreateDevice).Methods("POST")
+	router.HandleFunc("/download/{device_id}", h.DownloadSolarIrrData).Methods("GET")
 }

@@ -1,131 +1,133 @@
 package main
 
 import (
-	"os"
-	"log"
-	"time"
 	"context"
-	"syscall"
-	"strings"
 	"encoding/json"
 	"net/http"
-    "os/signal"
-	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/negeek/solar-sphere/solar-sentinel/db"
-    irr"github.com/negeek/solar-sphere/solar-sentinel/api/v1"
-	v1routes "github.com/negeek/solar-sphere/solar-sentinel/api/v1"
-	v1middlewares "github.com/negeek/solar-sphere/solar-sentinel/middlewares/v1"
-	
+	"github.com/gorilla/mux"
+
+	v1 "github.com/negeek/solar-sphere/solar-sentinel/api/v1"
+	authmw "github.com/negeek/solar-sphere/solar-sentinel/middlewares/v1"
+	repo "github.com/negeek/solar-sphere/solar-sentinel/repository/v1"
+	service "github.com/negeek/solar-sphere/solar-sentinel/service/v1"
+	"github.com/negeek/solar-sphere/solar-spectrum/env"
+	"github.com/negeek/solar-sphere/solar-spectrum/httpapi"
+	"github.com/negeek/solar-sphere/solar-spectrum/logging"
+	"github.com/negeek/solar-sphere/solar-spectrum/mongoutil"
 )
 
-var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-	var payloadMap map[string]interface{}
-	topic:=msg.Topic()
-	payload:=msg.Payload()
-	log.Printf("Received message: %s from topic: %s\n", payload, topic)
-    device_id:= strings.Split(topic, "/")[3]
-	err := json.Unmarshal(payload, &payloadMap)
-	if err != nil {
-		log.Fatal("Invalid msg format")
-	}
-    err = irr.SaveSolarIrrdianceData(device_id, payloadMap)
-	if err != nil {
-		log.Fatal("Unable to save data")
-	}
-
-}
-
-var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
-    log.Println("Mqtt Connected")
-}
-
-var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
-    log.Printf("Mqtt Connection lost: %v", err)
-}
-
-func suscribeToTopic(client mqtt.Client, topic string, qos byte, msgH mqtt.MessageHandler) {
-    token := client.Subscribe(topic, qos, msgH)
-    if token.Wait() && token.Error() != nil{
-		log.Println(token.Error())
-	}
-  	log.Printf("Subscribed to topic: %s", topic)
-}
-
-
 func main() {
-	appEnv:=os.Getenv("APP_ENV")
-	if appEnv=="dev"{
-		err := godotenv.Load(".env")
-		if err != nil {
-			log.Fatal("Error loading .env file")
+	if os.Getenv("APP_ENV") == "dev" {
+		if err := env.Load(".env"); err != nil {
+			panic("solar-sentinel: loading .env: " + err.Error())
 		}
 	}
 
-    //custom servermutiplexer
-	router := mux.NewRouter()
-	router.Use(v1middlewares.CORS)
-	v1routes.Routes(router.StrictSlash(true))
+	log := logging.New("solar-sentinel")
 
-    //custom server
-	server:=&http.Server{
-		Addr: ":5000",
-		Handler: router,
+	ctx := context.Background()
+	client, db, err := mongoutil.Connect(ctx, os.Getenv("DATABASE_URL"), os.Getenv("DB_NAME"))
+	if err != nil {
+		log.Error("connect to mongo", "error", err)
+		os.Exit(1)
+	}
+	log.Info("connected to mongo")
+
+	repository := repo.NewRepository(db)
+	deviceService := service.NewDeviceService(repository)
+	irradianceService := service.NewIrradianceService(repository)
+	handler := v1.NewHandler(deviceService, irradianceService)
+	authMiddleware := authmw.Authentication(repository, os.Getenv("VERIFICATION_KEY"))
+
+	router := mux.NewRouter()
+	router.Use(httpapi.CORS)
+	v1.Routes(router.StrictSlash(true), handler, authMiddleware)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5000"
+	}
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      router,
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
-		IdleTimeout:  60 *  time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
-    // DB connection
-	dbUrl:= os.Getenv("DATABASE_URL")
-	dbName:=os.Getenv("DB_NAME")
-	log.Println("Connecting to db")
-	dbctx, dbcancel, err:= db.Connect(dbUrl,dbName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	
-	// Connect to broker and suscribe to topic
-    opts := mqtt.NewClientOptions()
-    opts.AddBroker(os.Getenv("BROKER_URL"))
-    opts.SetClientID(os.Getenv("MQTT_CLIENT_ID"))
-    opts.SetUsername(os.Getenv("MQTT_USERNAME"))
-    opts.SetPassword(os.Getenv("MQTT_PASSWORD"))
-    opts.SetDefaultPublishHandler(messagePubHandler)
-    opts.OnConnect = connectHandler
-    opts.OnConnectionLost = connectLostHandler
-    client := mqtt.NewClient(opts)
-    if token := client.Connect(); token.Wait() && token.Error() != nil {
-        log.Println(token.Error())
-    }
-    suscribeToTopic(client, os.Getenv("MQTT_TOPIC"), 0, nil)
+	// A malformed or unexpected MQTT payload must never take the whole
+	// service down — log and move on to the next message.
+	messageHandler := func(_ mqtt.Client, msg mqtt.Message) {
+		topic := msg.Topic()
 
-    go func() {
-		log.Println("Start server")
-		if err:= server.ListenAndServe(); err != nil {
-			log.Fatal(err)
+		parts := strings.Split(topic, "/")
+		if len(parts) < 4 {
+			log.Error("mqtt message on malformed topic", "topic", topic)
+			return
+		}
+		deviceID := parts[3]
+
+		var data map[string]interface{}
+		if err := json.Unmarshal(msg.Payload(), &data); err != nil {
+			log.Error("mqtt message is not valid json", "topic", topic, "error", err)
+			return
+		}
+
+		if err := irradianceService.Save(context.Background(), deviceID, data); err != nil {
+			log.Error("saving irradiance reading", "device_id", deviceID, "error", err)
+		}
+	}
+
+	mqttOpts := mqtt.NewClientOptions()
+	mqttOpts.AddBroker(os.Getenv("BROKER_URL"))
+	mqttOpts.SetClientID(os.Getenv("MQTT_CLIENT_ID"))
+	mqttOpts.SetUsername(os.Getenv("MQTT_USERNAME"))
+	mqttOpts.SetPassword(os.Getenv("MQTT_PASSWORD"))
+	mqttOpts.SetDefaultPublishHandler(messageHandler)
+	mqttOpts.OnConnect = func(mqtt.Client) { log.Info("mqtt connected") }
+	mqttOpts.OnConnectionLost = func(_ mqtt.Client, err error) { log.Error("mqtt connection lost", "error", err) }
+
+	mqttClient := mqtt.NewClient(mqttOpts)
+	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
+		log.Error("mqtt connect", "error", token.Error())
+	}
+
+	mqttTopic := os.Getenv("MQTT_TOPIC")
+	if token := mqttClient.Subscribe(mqttTopic, 0, messageHandler); token.Wait() && token.Error() != nil {
+		log.Error("mqtt subscribe", "topic", mqttTopic, "error", token.Error())
+	} else {
+		log.Info("subscribed to mqtt topic", "topic", mqttTopic)
+	}
+
+	go func() {
+		log.Info("starting server", "port", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
-    c := make(chan os.Signal, 1)
-	
-	// accept graceful shutdowns when quit via SIGINT (Ctrl+C)
-	// SIGKILL will not be caught.
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
 
-	// Block until we receive our signal.
-	<-c
-
-	// Create a deadline to wait for.
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Disconnect
-	db.Disconnect(dbctx,dbcancel)
-	log.Println("Disconnect from broker")
-    client.Disconnect(250)
-    server.Shutdown(ctx)
-	os.Exit(0)
-}
+	mqttClient.Disconnect(250)
+	if err := mongoutil.Disconnect(shutdownCtx, client, 15*time.Second); err != nil {
+		log.Error("disconnect mongo", "error", err)
+	}
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Error("server shutdown", "error", err)
+	}
 
+	log.Info("shut down")
+}

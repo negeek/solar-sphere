@@ -1,113 +1,84 @@
 package v1
 
 import (
-	"time"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"net/http"
-	"github.com/gorilla/mux"
-	"github.com/negeek/solar-sphere/solar-sentinel/utils"
-	model"github.com/negeek/solar-sphere/solar-sentinel/repository/v1"
 
+	"github.com/gorilla/mux"
+
+	authmw "github.com/negeek/solar-sphere/solar-sentinel/middlewares/v1"
+	service "github.com/negeek/solar-sphere/solar-sentinel/service/v1"
+	"github.com/negeek/solar-sphere/solar-spectrum/httpapi"
 )
 
-// TODO Only Admins should access this endpoint.
-func CreateDeviceID(w http.ResponseWriter, r *http.Request){
-	var (
-		device = &model.Device{}
-		err error
-	)
-	// Read  request body
-	err= utils.Unmarshall(r.Body, device)
-	if err != nil{
-		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
-		return	
-	}
-
-	if device.ID == "" {
-		device.ID=utils.GenerateID()
-	}
-	
-	// Create device
-	err=device.Create()
-	if err != nil{
-		utils.JsonResponse(w, false, http.StatusBadRequest , "Error creating device", nil)
-		return	
-	}
-
-	// Response
-	utils.JsonResponse(w, true, http.StatusCreated ,"Successfully created device", map[string]interface{}{"device_id":device.ID})
-	return	
+type Handler struct {
+	devices    *service.DeviceService
+	irradiance *service.IrradianceService
 }
 
-func DownloadSolarIrrData(w http.ResponseWriter, r *http.Request){
-	var (
-		device = &model.Device{}
-		err error
-		data []model.SolarIrradiance
-		solarFields []interface{}
-	)
-	//  query param
-	vars := mux.Vars(r)
-	device.ID = vars["device_id"]
+func NewHandler(devices *service.DeviceService, irradiance *service.IrradianceService) *Handler {
+	return &Handler{devices: devices, irradiance: irradiance}
+}
 
-	// Prepare CSV file
-	filename:= device.ID+".csv"
+type createDeviceRequest struct {
+	Name string `json:"name"`
+}
 
-	// Prepare CSV data
-	data, err = device.GetAllSolarData()
-	if err != nil{
-		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
-		return	
-	}
-	
-	// Get fields from SolarIrradiance struct
-	solarFields, err = utils.StructFieldNames(data[0])
-	if err != nil{
-		utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
+// CreateDevice registers a new device owned by the authenticated caller. A
+// user can call this as many times as they like to register more devices —
+// there is no admin gate.
+func (h *Handler) CreateDevice(w http.ResponseWriter, r *http.Request) {
+	var req createDeviceRequest
+	if err := httpapi.Unmarshall(r.Body, &req); err != nil {
+		httpapi.JsonResponse(w, false, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
 
-	// Remove the Data field from list of SolarIrradiance struct fields
-	solarFields = utils.RemoveItem(solarFields, "Data")
-
-	// Get the fields of Data field in SolarIrradiance struct
-	dataKeys:=utils.MapKeys(data[0].Data)
-	headers	:= append(dataKeys, solarFields...)
-	csvData := [][]interface{}{headers}
-
-	// Get all row data to be written to csv file
-	for _, solar := range data {
-		dataRowValues:= utils.MapValues(solar.Data)
-		dataRowValues= append(dataRowValues, solar.DeviceID)
-		dataRowValues= append(dataRowValues, solar.DateUpdated.Format(time.RFC3339))
-		csvData = append(csvData, dataRowValues)
+	device, err := h.devices.CreateDevice(r.Context(), service.CreateDeviceInput{
+		Name:  req.Name,
+		Owner: authmw.EmailFromContext(r.Context()),
+	})
+	if err != nil {
+		httpapi.JsonResponse(w, false, http.StatusBadRequest, err.Error(), nil)
+		return
 	}
 
-	// create writer and write directly to response writer
+	httpapi.JsonResponse(w, true, http.StatusCreated, "Successfully created device", map[string]interface{}{"device_id": device.ID})
+}
+
+// DownloadSolarIrrData streams a device's readings as CSV, after confirming
+// the authenticated caller owns the device.
+func (h *Handler) DownloadSolarIrrData(w http.ResponseWriter, r *http.Request) {
+	deviceID := mux.Vars(r)["device_id"]
+	requester := authmw.EmailFromContext(r.Context())
+
+	rows, err := h.irradiance.Export(r.Context(), deviceID, requester)
+	if err != nil {
+		httpapi.JsonResponse(w, false, statusForExportErr(err), err.Error(), nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.csv", deviceID))
+
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
-
-	// Convert all row data to string and write to repsonse writer
-	for _, row := range csvData {
-		 // Convert each interface{} value to a string
-		 var stringRow []string
-		 for _, value := range row {
-			stringValue, ok := value.(string)
-			if !ok {
-				// Handle if value is not a string
-				stringValue = fmt.Sprintf("%v", value)
-			}
-			stringRow = append(stringRow, stringValue)
-		 }
-		err := writer.Write(stringRow)
-		if err != nil {
-			utils.JsonResponse(w, false, http.StatusBadRequest , err.Error(), nil)
+	for _, row := range rows {
+		if err := writer.Write(row); err != nil {
 			return
 		}
 	}
-	
-	// Set content headers and specify file name to be <device_id.csv>
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+}
+
+func statusForExportErr(err error) int {
+	switch {
+	case errors.Is(err, service.ErrDeviceNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, service.ErrNotDeviceOwner):
+		return http.StatusForbidden
+	default:
+		return http.StatusInternalServerError
+	}
 }
