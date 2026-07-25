@@ -9,19 +9,28 @@ import (
 	"net/mail"
 	"time"
 
-	repo "github.com/negeek/solar-sphere/solar-auth/repository/v1"
 	"github.com/negeek/solar-sphere/solar-spectrum/accesskey"
 	"github.com/negeek/solar-sphere/solar-spectrum/idgen"
 	"github.com/negeek/solar-sphere/solar-spectrum/shared"
 )
 
+// repository is the subset of solar-auth's repository this service needs.
+// Depending on this interface, rather than the concrete repository type,
+// lets tests exercise the service against a hand-written fake instead of a
+// real database.
+type repository interface {
+	CreateUser(ctx context.Context, u *shared.User) error
+	RevokeKey(ctx context.Context, key, email string) error
+	IsKeyRevoked(ctx context.Context, key string) (bool, error)
+}
+
 type AuthService struct {
-	repo            *repo.Repository
+	repo            repository
 	signingKey      string
 	verificationKey string
 }
 
-func NewAuthService(r *repo.Repository, signingKey, verificationKey string) *AuthService {
+func NewAuthService(r repository, signingKey, verificationKey string) *AuthService {
 	return &AuthService{repo: r, signingKey: signingKey, verificationKey: verificationKey}
 }
 
