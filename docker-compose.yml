@@ -1,0 +1,93 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
+  auth-migrate:
+    build:
+      context: .
+      dockerfile: solar-auth/Dockerfile
+    entrypoint: ["/migrate"]
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  auth:
+    build:
+      context: .
+      dockerfile: solar-auth/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      auth-migrate:
+        condition: service_completed_successfully
+
+  sentinel-migrate:
+    build:
+      context: .
+      dockerfile: solar-sentinel/Dockerfile
+    entrypoint: ["/migrate"]
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  sentinel:
+    build:
+      context: .
+      dockerfile: solar-sentinel/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "5000"
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+      sentinel-migrate:
+        condition: service_completed_successfully
+
+  galaxy:
+    build:
+      context: .
+      dockerfile: solar-galaxy/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      AUTH_BASE_URL: http://auth:3000
+      SENTINEL_BASE_URL: http://sentinel:5000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth
+      - sentinel
+
+volumes:
+  mongo-data:
+  mosquitto-data:

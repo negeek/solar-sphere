@@ -1,0 +1,13 @@
+.env
+*.env
+!.env.example
+
+# Local build output
+/bin/
+*.exe
+*.test
+
+# IDE/OS cruft
+.vscode/
+.idea/
+.DS_Store
