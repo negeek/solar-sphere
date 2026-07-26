@@ -1,31 +1,61 @@
 # Solar-Sphere
 
-Solar-Sphere is a self-hostable API for collecting and retrieving readings
-from low-cost solar-irradiance sensors.
+## Why I built this
 
-## The Device
-
-![Solar meter device](https://github.com/negeek/solar-sphere/blob/main/solarmeterproject.png)
-
-Solar-Sphere is the backend for a low-cost solar-irradiance meter built
-around five photodiodes whose outputs are averaged to reach an accuracy
-comparable to much more expensive thermopile-based pyranometers, at roughly
-8% of the cost. The design and validation are written up in:
+A few years ago, in my final year, a colleague and I built a low-cost
+solar-irradiance meter: five photodiodes averaged together to reach an
+accuracy comparable to much more expensive thermopile-based pyranometers,
+at roughly 8% of the cost. The design and validation are written up in:
 
 > Adebisi J. I., Adebowale D. A., Adegoke O. M., "Development of a Low-Cost
 > Irradiance Meter with Remote Data Logger," *Advanced Engineering Forum*,
 > Vol. 54, pp. 91–103, 2025. https://www.scientific.net/AEF.54.91
 
-The paper's own prototype streamed readings to ThingSpeak over Wi-Fi. This
-repository is a self-hosted alternative to that: your device publishes
-readings over MQTT, and this API stores and serves them back to you — no
-third-party IoT platform involved, and no dependency on a research-lab
-Arduino serial monitor either, which is what originally motivated writing
-this codebase.
+![Solar meter device](https://github.com/negeek/solar-sphere/blob/main/solarmeterproject.png)
+
+Once the meter itself worked, I didn't want to be stuck reading numbers off
+an Arduino serial monitor — I wanted the readings somewhere I could get to
+in real time, store, and export for analysis. That's what this codebase
+was originally for. Since then I've spent time growing as a software
+engineer, and I've come back to rebuild this the way I'd actually build a
+backend today: a proper service layer instead of logic-in-handlers,
+real tests, structured logging, and something you can self-host with one
+command instead of a research-project script.
+
+## What it actually does
+
+Strip away the "solar" branding and this is a small, generic pattern:
+
+**device → publishes JSON over MQTT → gets authenticated, stored, and made
+downloadable as CSV, scoped to whoever owns that device.**
+
+A reading is stored as `{device_id, data: {...arbitrary JSON...}, timestamps}`
+— the `data` field isn't tied to solar-irradiance fields at all. Any device
+that can publish JSON to an MQTT topic can use this exactly as-is: a
+temperature logger, a soil-moisture sensor, a home-brew air-quality
+monitor, whatever you've got that just needs "publish readings under my own
+device ID, authenticate as the owner, pull them back out as CSV later."
+The service/collection names (`solar-sentinel`, `solar-irradiance`) still
+reflect what it was originally built for — I haven't renamed them — but
+nothing about the data model or auth model assumes solar irradiance
+specifically.
+
+## Design principles
+
+- **Lean on dependencies.** Outside of the Mongo driver, the MQTT client,
+  and a router, this avoids reaching for libraries where a small amount of
+  standard-library code does the job — env-file loading and DB migrations
+  are both hand-rolled rather than pulled in as dependencies.
+- **Memory-efficient, small footprint.** Each service compiles to a static
+  binary running in a distroless image (no shell, no package manager, just
+  the binary) — the whole stack (3 services + MongoDB + an MQTT broker) is
+  light enough to self-host on a small VPS or something like a Raspberry
+  Pi, not something that needs a cluster.
+- **A handful of independent services, not a monolith.** Each piece
+  (`solar-auth`, `solar-sentinel`, `solar-galaxy`) is its own Go module you
+  could run, redeploy, or scale on its own.
 
 ## Architecture
-
-Four independent Go modules, each deployable on its own:
 
 ```
                      ┌──────────────┐
@@ -64,38 +94,22 @@ solar-spectrum: shared library (types, env/log/http/JWT/Mongo helpers,
 - **solar-spectrum** — the shared library the other three import (not a
   service you run).
 
-## Self-hosting (Docker)
+## Self-hosting
 
-Requires Docker and Docker Compose. Two ways to do it:
-
-### Build from source
+Requires Docker and Docker Compose. Grab `docker-compose.sample.yml`,
+`mosquitto/mosquitto.conf`, and `.env.example` from this repo (cloning it
+is the easiest way):
 
 ```bash
 git clone https://github.com/negeek/solar-sphere.git && cd solar-sphere
 cp .env.example .env
 go run ./solar-spectrum/cmd/keygen   # prints SIGNING_KEY and VERIFICATION_KEY — paste both into .env
-docker compose up --build
-```
-
-### Self-hosting with pre-built images
-
-Every push to `main` publishes multi-arch (amd64/arm64 — including
-Raspberry Pi) images to Docker Hub under `negeek/solar-sphere`, tagged
-`auth-latest`, `sentinel-latest`, and `galaxy-latest`. You still need a
-local clone to run the keygen command and to get `docker-compose.sample.yml`
-and `mosquitto/mosquitto.conf`, but nothing gets built locally — Compose
-just pulls the published images:
-
-```bash
-git clone https://github.com/negeek/solar-sphere.git && cd solar-sphere
-cp .env.example .env
-go run ./solar-spectrum/cmd/keygen   # paste SIGNING_KEY/VERIFICATION_KEY into .env
 docker compose -f docker-compose.sample.yml up
 ```
 
-Either way, this starts MongoDB, an MQTT broker (Mosquitto), and all three
-services, applying database migrations automatically before each service
-starts.
+This pulls the published images (no local build step), starts MongoDB, an
+MQTT broker (Mosquitto), and all three services, and applies database
+migrations automatically before each service starts.
 
 | Service        | Port |
 |----------------|------|
@@ -151,6 +165,9 @@ Broker:  tcp://localhost:1883
 Topic:   solar-sphere/solar-sentinel/sensor/<device_id>/solar-irradiance
 ```
 
+The JSON body can be whatever key/value readings your device produces —
+it's stored as-is.
+
 ### 4. Download your data
 
 ```bash
@@ -161,11 +178,13 @@ curl -X GET 'http://localhost:8080/sentinel/v1/download/<device_id>' \
 Streams a CSV of that device's readings. Only the device's owner can
 download it — anyone else's key gets a 403.
 
-## Local development (without Docker)
+## Local development
 
 Each service is its own Go module; `go.work` at the repo root ties them
 together so they resolve `solar-spectrum` locally without needing it
-published anywhere.
+published anywhere. `docker-compose.yml` (as opposed to the sample compose
+file above) builds all three images from source, if you'd rather do that
+than run them with `go run`.
 
 ```bash
 # Infra only, via Docker — or point at your own local Mongo/Mosquitto instead.
@@ -195,17 +214,6 @@ TEST_DATABASE_URL=mongodb://localhost:27017 go test ./...
 
 Each of those tests uses its own throwaway database and drops it in
 cleanup.
-
-## Publishing images (for maintainers/forks)
-
-`.github/workflows/docker-publish.yml` builds and pushes all three images
-to Docker Hub on every push to `main`. To enable it on a fork, set under
-*Settings → Secrets and variables → Actions*:
-
-- Variables: `DOCKERHUB_USERNAME` (required), `DOCKERHUB_REPO` (optional,
-  defaults to `solar-sphere`)
-- Secrets: `DOCKERHUB_TOKEN` — a Docker Hub access token, not your password
-  (Docker Hub → Account Settings → Security → New Access Token)
 
 ## Notes on the security model
 
