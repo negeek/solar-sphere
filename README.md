@@ -18,11 +18,7 @@ ThingSpeak. Neither was something I wanted to live with day to day: a
 serial monitor means staying tethered to a laptop, and ThingSpeak is a lot
 of platform for what amounts to "store some numbers, get them back later."
 I wanted something small and easy — my own place to receive, store, and
-export the readings. That's what this codebase was originally for. Since
-then I've grown as a software engineer, and I've come back to rebuild it
-the way I'd actually build a backend today: a proper service layer instead
-of logic-in-handlers, real tests, structured logging, and something you can
-self-host with one command.
+export the readings. That's what this codebase was originally for.
 
 ## What it actually does
 
