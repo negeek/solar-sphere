@@ -24,10 +24,10 @@ import (
 )
 
 func main() {
-	if os.Getenv("APP_ENV") == "dev" {
-		if err := env.Load(".env"); err != nil {
-			panic("solar-sentinel: loading .env: " + err.Error())
-		}
+	// .env is optional — present for local dev, absent in Docker (where
+	// Compose injects env vars directly). Only a malformed file is an error.
+	if err := env.Load(".env"); err != nil && !os.IsNotExist(err) {
+		panic("solar-sentinel: loading .env: " + err.Error())
 	}
 
 	log := logging.New("solar-sentinel")
