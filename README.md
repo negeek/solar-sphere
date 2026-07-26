@@ -101,8 +101,8 @@ is the easiest way):
 ```bash
 git clone https://github.com/negeek/solar-sphere.git && cd solar-sphere
 cp .env.example .env
-go run ./solar-spectrum/cmd/keygen   # prints SIGNING_KEY and VERIFICATION_KEY — paste both into .env
-docker compose -f docker-compose.sample.yml up
+make keygen   # prints SIGNING_KEY and VERIFICATION_KEY — paste both into .env
+make docker-sample
 ```
 
 This pulls the published images (no local build step), starts MongoDB, an
@@ -180,34 +180,35 @@ download it — anyone else's key gets a 403.
 
 Each service is its own Go module; `go.work` at the repo root ties them
 together so they resolve `solar-spectrum` locally without needing it
-published anywhere. `docker-compose.yml` (as opposed to the sample compose
-file above) builds all three images from source, if you'd rather do that
-than run them with `go run`.
+published anywhere. There's a `Makefile` wrapping the common commands —
+run `make help` to see all of them.
 
 ```bash
 # Infra only, via Docker — or point at your own local Mongo/Mosquitto instead.
 docker compose up mongo mosquitto
 
-# Per service (repeat for solar-sentinel, solar-galaxy):
-cd solar-auth
-cp .env.example .env   # then fill in SIGNING_KEY/VERIFICATION_KEY
-go run ./db/v1          # apply migrations
-go run .                 # start the service
+# Per service (repeat with -sentinel for solar-sentinel; solar-galaxy has
+# no database, so no migration step):
+cp solar-auth/.env.example solar-auth/.env   # then fill in SIGNING_KEY/VERIFICATION_KEY
+make migrate-auth
+make run-auth
 ```
 
-Run the test suite from the repo root:
+`make docker-up` builds all three images from source instead, if you'd
+rather do that than run services individually with `go run`.
 
 ```bash
-go build ./... && go vet ./...
-go test ./...
+make build vet test   # or just `make all`, which also checks gofmt
 ```
 
 Most tests (service logic, handlers, the gateway) run with no setup. The
 repository-layer integration tests talk to a real MongoDB and are skipped
-unless `TEST_DATABASE_URL` is set:
+unless `TEST_DATABASE_URL` is set — `make test-integration` sets a sensible
+default (`mongodb://localhost:27017`) or respects your own:
 
 ```bash
-TEST_DATABASE_URL=mongodb://localhost:27017 go test ./...
+make test-integration
+TEST_DATABASE_URL=mongodb://somewhere-else:27017 make test-integration
 ```
 
 Each of those tests uses its own throwaway database and drops it in
