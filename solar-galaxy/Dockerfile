@@ -4,9 +4,6 @@
 FROM golang:1-alpine AS builder
 WORKDIR /src
 
-COPY go.work go.work.sum ./
-COPY solar-auth/ ./solar-auth/
-COPY solar-sentinel/ ./solar-sentinel/
 COPY solar-galaxy/ ./solar-galaxy/
 COPY solar-spectrum/ ./solar-spectrum/
 

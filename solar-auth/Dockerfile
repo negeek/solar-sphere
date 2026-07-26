@@ -1,15 +1,14 @@
-# Build context is the repository root: all four modules are needed to
-# resolve github.com/negeek/solar-sphere/solar-spectrum via go.work, since
-# it isn't (yet) published as a versioned module.
+# Build context is the repository root: solar-spectrum isn't published as a
+# versioned module yet, so solar-auth/go.mod has a `replace` pointing at
+# ../solar-spectrum — both need to be present, siblings, for that to
+# resolve. Sibling services (solar-sentinel, solar-galaxy) aren't needed
+# here at all.
 #   docker build -f solar-auth/Dockerfile -t solar-auth .
 
 FROM golang:1-alpine AS builder
 WORKDIR /src
 
-COPY go.work go.work.sum ./
 COPY solar-auth/ ./solar-auth/
-COPY solar-sentinel/ ./solar-sentinel/
-COPY solar-galaxy/ ./solar-galaxy/
 COPY solar-spectrum/ ./solar-spectrum/
 
 WORKDIR /src/solar-auth
