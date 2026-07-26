@@ -2,10 +2,10 @@
 
 ## Why I built this
 
-A few years ago, in my final year, a colleague and I built a low-cost
-solar-irradiance meter: five photodiodes averaged together to reach an
-accuracy comparable to much more expensive thermopile-based pyranometers,
-at roughly 8% of the cost. The design and validation are written up in:
+I worked with a colleague to build a low-cost solar-irradiance meter: five
+photodiodes averaged together to reach an accuracy comparable to much more
+expensive thermopile-based pyranometers, at roughly 8% of the cost. The
+design and validation are written up in:
 
 > Adebisi J. I., Adebowale D. A., Adegoke O. M., "Development of a Low-Cost
 > Irradiance Meter with Remote Data Logger," *Advanced Engineering Forum*,
@@ -13,14 +13,16 @@ at roughly 8% of the cost. The design and validation are written up in:
 
 ![Solar meter device](https://github.com/negeek/solar-sphere/blob/main/solarmeterproject.png)
 
-Once the meter itself worked, I didn't want to be stuck reading numbers off
-an Arduino serial monitor — I wanted the readings somewhere I could get to
-in real time, store, and export for analysis. That's what this codebase
-was originally for. Since then I've spent time growing as a software
-engineer, and I've come back to rebuild this the way I'd actually build a
-backend today: a proper service layer instead of logic-in-handlers,
-real tests, structured logging, and something you can self-host with one
-command instead of a research-project script.
+The paper's own prototype read out over a serial monitor and pushed data to
+ThingSpeak. Neither was something I wanted to live with day to day: a
+serial monitor means staying tethered to a laptop, and ThingSpeak is a lot
+of platform for what amounts to "store some numbers, get them back later."
+I wanted something small and easy — my own place to receive, store, and
+export the readings. That's what this codebase was originally for. Since
+then I've grown as a software engineer, and I've come back to rebuild it
+the way I'd actually build a backend today: a proper service layer instead
+of logic-in-handlers, real tests, structured logging, and something you can
+self-host with one command.
 
 ## What it actually does
 
